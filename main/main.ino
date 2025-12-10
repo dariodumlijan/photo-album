@@ -7,8 +7,8 @@
 TFT_eSPI tft = TFT_eSPI();
 
 // SD card chip select pin for ESP32-32E board
-// The board has an SD card slot, typically uses GPIO 5
-#define SD_CS 5
+// The ESP32-32E board uses GPIO 4 for SD card CS
+#define SD_CS 4
 
 // Backlight pin (defined in tft_setup.h but referenced here for control)
 #define TFT_BL 27

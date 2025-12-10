@@ -26,13 +26,12 @@
 #define TFT_BACKLIGHT_ON HIGH
 
 // SPI Frequency
-#define SPI_FREQUENCY 27000000      // 27MHz - stable for most ST7796 displays
-#define SPI_READ_FREQUENCY 20000000 // 20MHz for reading
-#define SPI_TOUCH_FREQUENCY 2500000 // 2.5MHz for touch (if applicable)
+#define SPI_FREQUENCY  27000000  // 27MHz - stable for most ST7796 displays
+#define SPI_READ_FREQUENCY  20000000  // 20MHz for reading
+#define SPI_TOUCH_FREQUENCY  2500000  // 2.5MHz for touch (if applicable)
 
-// Color order (some ST7796 displays have BGR instead of RGB)
-// Try both if colors appear wrong
-#define TFT_RGB_ORDER TFT_RGB // Use TFT_BGR if colors are swapped
+// Color order - ESP32-32E uses BGR color order
+#define TFT_RGB_ORDER TFT_BGR
 
 // Fonts to be available
 #define LOAD_GLCD  // Font 1. Original Adafruit 8 pixel font needs ~1820 bytes in FLASH
