@@ -59,8 +59,7 @@ void setup(void)
   tft.setSwapBytes(true);
 
   // Calibrate touch for rotation 1 (landscape)
-  // You can run the Touch_calibrate example to get precise values
-  uint16_t calData[5] = {286, 3534, 283, 3600, 6};
+  uint16_t calData[5] = {257, 3677, 223, 3571, 7};
   tft.setTouch(calData);
 
   Serial.println("TFT and Touch initialized");
@@ -110,32 +109,57 @@ void loop()
     // Add "/" prefix to filename for SD card path
     String filepath = "/" + file_list[file_index];
 
+    bool image_rendered = false;
+
+    // Wrap image rendering with error handling
     // Get image dimensions to center it
     uint16_t img_w = 0, img_h = 0;
     SPI_ON_SD;
-    TJpgDec.getFsJpgSize(&img_w, &img_h, filepath.c_str(), SD);
+    int result = TJpgDec.getFsJpgSize(&img_w, &img_h, filepath.c_str(), SD);
 
-    // Calculate centered position
-    int16_t x_pos = (tft.width() - img_w) / 2;
-    int16_t y_pos = (tft.height() - img_h) / 2;
+    if (result == 0)
+    {
+      // Calculate centered position
+      int16_t x_pos = (tft.width() - img_w) / 2;
+      int16_t y_pos = (tft.height() - img_h) / 2;
 
-    // Ensure position is not negative
-    if (x_pos < 0)
-      x_pos = 0;
-    if (y_pos < 0)
-      y_pos = 0;
+      // Ensure position is not negative
+      if (x_pos < 0)
+        x_pos = 0;
+      if (y_pos < 0)
+        y_pos = 0;
 
-    Serial.print("Image size: ");
-    Serial.print(img_w);
-    Serial.print("x");
-    Serial.print(img_h);
-    Serial.print(" - Drawing at position (");
-    Serial.print(x_pos);
-    Serial.print(", ");
-    Serial.print(y_pos);
-    Serial.println(")");
+      Serial.print("Image size: ");
+      Serial.print(img_w);
+      Serial.print("x");
+      Serial.print(img_h);
+      Serial.print(" - Drawing at position (");
+      Serial.print(x_pos);
+      Serial.print(", ");
+      Serial.print(y_pos);
+      Serial.println(")");
 
-    TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
+      // Try to draw the image
+      result = TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
+
+      if (result == 0)
+      {
+        image_rendered = true;
+      }
+      else
+      {
+        Serial.print("Error drawing image (error code: ");
+        Serial.print(result);
+        Serial.println("). Skipping to next image.");
+      }
+    }
+    else
+    {
+      Serial.print("Error getting image size (error code: ");
+      Serial.print(result);
+      Serial.println("). Skipping to next image.");
+    }
+
     SPI_OFF_SD;
 
     file_index++;
@@ -156,18 +180,24 @@ void loop()
     Serial.print("Touch detected at X: ");
     Serial.print(touch_x);
     Serial.print(", Y: ");
-    Serial.println(touch_y);
+    Serial.print(touch_y);
+    Serial.print(" (Screen: ");
+    Serial.print(tft.width());
+    Serial.print("x");
+    Serial.print(tft.height());
+    Serial.println(")");
 
-    // Right half = next image, Left half = previous image
+    // Left side = previous image, Right side = next image
     // Screen is 480x320 in landscape mode (rotation 1)
+    // X coordinate represents left/right position
     if (touch_x > 240)
     {
-      Serial.println("Next image");
+      Serial.println("Next image (RIGHT side, touch_x > 240)");
       flag = true;
     }
     else
     {
-      Serial.println("Previous image");
+      Serial.println("Previous image (LEFT side, touch_x <= 240)");
       file_index = (file_index + file_list.size() - 2) % file_list.size();
       flag = true;
     }

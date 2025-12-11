@@ -18,6 +18,3 @@ assets/**/*.heif
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# misc
-docs
