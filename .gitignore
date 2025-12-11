@@ -1,0 +1,23 @@
+# image files
+assets/**/*.jpg
+assets/**/*.jpeg
+assets/**/*.png
+assets/**/*.gif
+assets/**/*.bmp
+assets/**/*.tiff
+assets/**/*.tif
+assets/**/*.webp
+assets/**/*.heic
+assets/**/*.heif
+
+# apple misc
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# misc
+docs

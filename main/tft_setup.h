@@ -9,26 +9,29 @@
 #define ST7796_DRIVER
 
 // Display resolution
-#define TFT_WIDTH  320
+#define TFT_WIDTH 320
 #define TFT_HEIGHT 480
 
 // ESP32-32E Specific Pin Configuration
 // These pins are fixed on the ESP32-32E board
-#define TFT_MISO 12  // SDO
-#define TFT_MOSI 13  // SDI
-#define TFT_SCLK 14  // SCK
-#define TFT_CS   15  // CS
-#define TFT_DC   2   // DC/RS
-#define TFT_RST  -1  // RST connected to ESP32 EN pin (use -1)
+#define TFT_MISO 12 // SDO
+#define TFT_MOSI 13 // SDI
+#define TFT_SCLK 14 // SCK
+#define TFT_CS 15   // CS
+#define TFT_DC 2    // DC/RS
+#define TFT_RST -1  // RST connected to ESP32 EN pin (use -1)
 
 // Backlight control - ESP32-32E has backlight on GPIO 27
-#define TFT_BL   27
+#define TFT_BL 27
 #define TFT_BACKLIGHT_ON HIGH
 
+// Touch screen chip select - XPT2046
+#define TOUCH_CS 33
+
 // SPI Frequency
-#define SPI_FREQUENCY  27000000  // 27MHz - stable for most ST7796 displays
-#define SPI_READ_FREQUENCY  20000000  // 20MHz for reading
-#define SPI_TOUCH_FREQUENCY  2500000  // 2.5MHz for touch (if applicable)
+#define SPI_FREQUENCY 80000000      // 80MHz - maximum for ST7796
+#define SPI_READ_FREQUENCY 20000000 // 20MHz for reading
+#define SPI_TOUCH_FREQUENCY 2500000 // 2.5MHz for touch controller
 
 // Color order - ESP32-32E uses BGR color order
 #define TFT_RGB_ORDER TFT_BGR
