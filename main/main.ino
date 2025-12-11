@@ -100,9 +100,6 @@ void loop()
   // Auto-advance images every x seconds or when flag is set
   if ((millis() - runtime >= IMAGE_SWITCH_DELAY) || flag)
   {
-    Serial.print("Displaying image: ");
-    Serial.println(file_list[file_index]);
-
     // Let TFT_eSPI manage CS internally
     tft.fillScreen(TFT_BLACK);
 
@@ -128,16 +125,6 @@ void loop()
         x_pos = 0;
       if (y_pos < 0)
         y_pos = 0;
-
-      Serial.print("Image size: ");
-      Serial.print(img_w);
-      Serial.print("x");
-      Serial.print(img_h);
-      Serial.print(" - Drawing at position (");
-      Serial.print(x_pos);
-      Serial.print(", ");
-      Serial.print(y_pos);
-      Serial.println(")");
 
       // Try to draw the image
       result = TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
@@ -177,27 +164,14 @@ void loop()
   // getTouch returns true if touch is detected, threshold filters light touches
   if (tft.getTouch(&touch_x, &touch_y, 600))
   {
-    Serial.print("Touch detected at X: ");
-    Serial.print(touch_x);
-    Serial.print(", Y: ");
-    Serial.print(touch_y);
-    Serial.print(" (Screen: ");
-    Serial.print(tft.width());
-    Serial.print("x");
-    Serial.print(tft.height());
-    Serial.println(")");
-
     // Left side = previous image, Right side = next image
     // Screen is 480x320 in landscape mode (rotation 1)
-    // X coordinate represents left/right position
     if (touch_x > 240)
     {
-      Serial.println("Next image (RIGHT side, touch_x > 240)");
       flag = true;
     }
     else
     {
-      Serial.println("Previous image (LEFT side, touch_x <= 240)");
       file_index = (file_index + file_list.size() - 2) % file_list.size();
       flag = true;
     }
