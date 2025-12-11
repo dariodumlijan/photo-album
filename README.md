@@ -141,6 +141,28 @@ The [`prepare.sh`](./scripts/prepare.sh) script automates image preparation to e
 2. Run the script: `./scripts/prepare.sh`
 3. Copy processed images from [`assets/target/`](./assets/target) to your SD card root directory
 
+#### Randomizing Image Display Order
+
+The project includes a [`randomize.sh`](./scripts/randomize.sh) script to shuffle the display order of images:
+
+```bash
+./scripts/randomize.sh
+```
+
+**What the `randomize.sh` Script Does:**
+
+- Renames all `.jpg` files in [`assets/target/`](./assets/target) with randomized names
+- Creates a random display order (images are displayed alphabetically by filename)
+- Files are renamed to sequential numbers (001.jpg, 002.jpg, etc.) in random order
+- Useful for creating variety in slideshow presentation
+
+**Usage:**
+
+1. After running `prepare.sh`, run: `./scripts/randomize.sh`
+2. The images in [`assets/target/`](./assets/target) will be renamed in random order
+3. Copy the randomized images to your SD card
+4. Each time you run the script, a new random order is generated
+
 ### 5. Prepare the SD Card
 
 1. Format an 8GB MicroSD card as **FAT32**
@@ -203,7 +225,8 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 │   ├── User_Setup.h          # TFT_eSPI configuration for ESP32-32E Display
 │   └── ST7796_Init.h         # ST7796 driver initialization sequence
 ├── scripts/
-│   └── prepare.sh            # Image preparation script
+│   ├── prepare.sh            # Image preparation script
+│   └── randomize.sh          # Image randomization script
 ├── assets/
 │   ├── root/                 # Place original images here
 │   └── target/               # Processed images (copy to SD card)
