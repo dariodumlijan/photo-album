@@ -51,6 +51,12 @@ fi
 if [ ! -d "$TARGET_DIR" ]; then
     echo -e "${YELLOW}Creating target directory: $TARGET_DIR${NC}"
     mkdir -p "$TARGET_DIR"
+else
+    # Remove existing images from target directory (keep .keep file)
+    echo -e "${YELLOW}Cleaning target directory...${NC}"
+    find "$TARGET_DIR" -type f ! -name '.keep' -delete
+    echo -e "${GREEN}✓ Target directory cleaned${NC}"
+    echo ""
 fi
 
 # Find all common image files (case insensitive)

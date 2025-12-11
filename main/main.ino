@@ -12,6 +12,10 @@ TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 
 #define TFT_GREY 0x5AEB // New colour
 
+#define BOOT_BUTTON 0       // GPIO0 is the boot button
+#define BUTTON_DEBOUNCE 300 // milliseconds
+#define TFT_BL 27           // Backlight control pin
+
 // SD Card uses VSPI bus
 #define SD_CS 5
 
@@ -42,11 +46,20 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
 
 std::vector<String> file_list;
 int file_index = 0;
+bool display_on = true;
+unsigned long last_button_press = 0;
 
 void setup(void)
 {
   Serial.begin(115200);
   Serial.println("ESP32-32E Photo Frame Starting...");
+
+  // Initialize boot button
+  pinMode(BOOT_BUTTON, INPUT_PULLUP);
+
+  // Initialize backlight pin
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH); // Turn backlight on at startup
 
   // Initialize chip select pin for SD
   pinMode(SD_CS, OUTPUT);
@@ -97,8 +110,38 @@ bool flag = true;
 
 void loop()
 {
-  // Auto-advance images every x seconds or when flag is set
-  if ((millis() - runtime >= IMAGE_SWITCH_DELAY) || flag)
+  // Check boot button (with debouncing)
+  if (digitalRead(BOOT_BUTTON) == LOW &&
+      (millis() - last_button_press > BUTTON_DEBOUNCE))
+  {
+
+    display_on = !display_on; // Toggle state
+
+    if (display_on)
+    {
+      digitalWrite(TFT_BL, HIGH); // Turn backlight on
+      tft.fillScreen(TFT_BLACK);  // Clear any artifacts
+    }
+    else
+    {
+      tft.fillScreen(TFT_BLACK); // Fill screen black before turning off
+      digitalWrite(TFT_BL, LOW); // Turn backlight off
+    }
+
+    last_button_press = millis();
+
+    // Wait for button release
+    while (digitalRead(BOOT_BUTTON) == LOW)
+    {
+      delay(50);
+    }
+
+    // Additional debounce after release
+    delay(200);
+  }
+
+  // Auto-advance images every x seconds or when flag is set (only when display is on)
+  if (display_on && ((millis() - runtime >= IMAGE_SWITCH_DELAY) || flag))
   {
     // Let TFT_eSPI manage CS internally
     tft.fillScreen(TFT_BLACK);

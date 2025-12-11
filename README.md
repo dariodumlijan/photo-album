@@ -191,6 +191,7 @@ The project includes a [`randomize.sh`](./scripts/randomize.sh) script to shuffl
 - **Auto-advance**: Images change every 5 seconds (configurable)
 - **Touch left side**: Go to previous image
 - **Touch right side**: Go to next image
+- **Boot button**: Press to toggle display on/off (backlight control)
 
 ### Customization
 
@@ -257,6 +258,31 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 
 - Run the calibration sketch in [`calibrate/`](./calibrate)
 - Update calibration values in main sketch
+
+## Changelog
+
+### Recent Updates
+
+#### Image Preparation Pipeline Script
+
+- Created new [`pipeline.sh`](./scripts/pipeline.sh) script that combines image preparation and randomization
+- Automatically runs [`prepare.sh`](./scripts/prepare.sh) followed by [`randomize.sh`](./scripts/randomize.sh)
+- Includes colored output for better visibility of pipeline stages
+- Provides clear success/failure feedback for each step
+- Aborts pipeline if any step fails
+
+**Usage:**
+
+```bash
+./scripts/pipeline.sh
+```
+
+#### Image Preparation Script Enhancement
+
+- Modified [`prepare.sh`](./scripts/prepare.sh) to automatically clean the target directory
+- Before processing new images, removes all existing files in [`assets/target/`](./assets/target) (except `.keep` file)
+- Ensures fresh output with each run, preventing duplicate or outdated images
+- Provides user feedback during the cleaning process
 
 ## License
 
