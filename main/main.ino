@@ -1,281 +1,252 @@
-#include <TFT_eSPI.h>
 #include <SPI.h>
-#include <SD.h>
+#include "SD.h"
+#include "FS.h"
+#include <XPT2046_Touchscreen.h>
 #include <TJpg_Decoder.h>
 
-// TFT display instance
-TFT_eSPI tft = TFT_eSPI();
+#include <TFT_eSPI.h> // Hardware-specific library
 
-// SD card pins for ESP32-32E board (uses separate VSPI bus)
-#define SD_CS   5   // SD card chip select
-#define SD_MOSI 23  // SD card MOSI
-#define SD_MISO 19  // SD card MISO
-#define SD_SCK  18  // SD card SCK
+TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 
-// TFT CS pin (from tft_setup.h)
-#define TFT_CS  15
+#define TFT_GREY 0x5AEB // New colour
 
-// Backlight pin (defined in tft_setup.h but referenced here for control)
-#define TFT_BL 27
+// ESP32-32E Pin Definitions
+// TFT and Touch share HSPI bus
+#define TFT_CS 15
+#define TOUCH_CS 33
+#define TOUCH_IRQ 36
 
-// SPI Chip Select Control Macros
-// These ensure only one device is active at a time
-#define SPI_ON_TFT  digitalWrite(TFT_CS, LOW)
+// SD Card uses VSPI bus
+#define SD_CS 5
+
+// HSPI pins (for TFT and Touch)
+#define HSPI_MISO 12
+#define HSPI_MOSI 13
+#define HSPI_SCK 14
+
+// VSPI pins (for SD Card)
+#define VSPI_MISO 19
+#define VSPI_MOSI 23
+#define VSPI_SCK 18
+
+// SPI control macros
+#define SPI_ON_TFT digitalWrite(TFT_CS, LOW)
 #define SPI_OFF_TFT digitalWrite(TFT_CS, HIGH)
-#define SPI_ON_SD   digitalWrite(SD_CS, LOW)
-#define SPI_OFF_SD  digitalWrite(SD_CS, HIGH)
+#define SPI_ON_SD digitalWrite(SD_CS, LOW)
+#define SPI_OFF_SD digitalWrite(SD_CS, HIGH)
+#define TOUCH_ON digitalWrite(TOUCH_CS, LOW)
+#define TOUCH_OFF digitalWrite(TOUCH_CS, HIGH)
 
-// Display settings
-#define SCREEN_WIDTH 480
-#define SCREEN_HEIGHT 320
+// Touch screen using XPT2046
+XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
 
-// Image display duration (milliseconds)
-#define IMAGE_DISPLAY_TIME 5000
-
-// Array to store image filenames
-String imageFiles[100];
-int imageCount = 0;
-int currentImageIndex = 0;
-
-// TJpg_Decoder callback function to output image to TFT
-bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
+bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
 {
   // Stop further decoding as image is running off bottom of screen
-  if (y >= tft.height()) return 0;
-  
-  // Enable TFT, disable SD for display operation
-  SPI_OFF_SD;
-  SPI_ON_TFT;
-  
-  // This function will clip automatically at TFT boundaries
+  if (y >= tft.height())
+    return 0;
+
+  // This function will clip the image block rendering automatically at the TFT boundaries
   tft.pushImage(x, y, w, h, bitmap);
-  
-  // Disable TFT after operation
-  SPI_OFF_TFT;
-  
+
+  // This might work instead if you adapt the sketch to use the Adafruit_GFX library
+  // tft.drawRGBBitmap(x, y, bitmap, w, h);
+
   // Return 1 to decode next block
   return 1;
 }
 
-void setup()
+String file_list[40];
+int file_num = 0;
+int file_index = 0;
+
+void setup(void)
 {
   Serial.begin(115200);
   Serial.println("ESP32-32E Photo Frame Starting...");
 
   // Initialize chip select pins
-  pinMode(TFT_CS, OUTPUT);
   pinMode(SD_CS, OUTPUT);
-  
-  // Initially disable both devices
-  SPI_OFF_TFT;
+  pinMode(TOUCH_CS, OUTPUT);
+  pinMode(TFT_CS, OUTPUT);
+
+  // Disable all devices initially
   SPI_OFF_SD;
+  TOUCH_OFF;
+  SPI_OFF_TFT;
 
-  // Initialize backlight
-  pinMode(TFT_BL, OUTPUT);
-  digitalWrite(TFT_BL, HIGH); // Turn on backlight
-
-  // Enable TFT for initialization
+  // IMPORTANT: Initialize TFT BEFORE SD Card to avoid SPI conflicts
+  // TFT_eSPI library will handle its own SPI setup based on tft_setup.h
   SPI_ON_TFT;
-  
-  // Initialize TFT display
   tft.init();
-  tft.setRotation(1); // Landscape mode (adjust 0-3 as needed)
+  tft.setRotation(1); // Landscape mode
   tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setTextSize(2);
-
-  // Display startup message
-  tft.setCursor(10, 150);
-  tft.println("Initializing SD Card...");
-  
-  // Disable TFT before SD operations
+  tft.setSwapBytes(true);
   SPI_OFF_TFT;
 
   // Initialize TJpg_Decoder
   TJpgDec.setJpgScale(1);
-  TJpgDec.setSwapBytes(true);
   TJpgDec.setCallback(tft_output);
 
-  // Enable SD for initialization
+  // Initialize default SPI for SD Card (VSPI: pins 18, 19, 23)
+  SPI.begin(VSPI_SCK, VSPI_MISO, VSPI_MOSI, SD_CS);
+
+  // Initialize SD Card
   SPI_ON_SD;
-  
-  // Initialize SD card with custom SPI pins (VSPI bus)
-  SPIClass spi = SPIClass(VSPI);
-  spi.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-  
-  // Disable SD briefly for proper init
-  SPI_OFF_SD;
-  delay(10);
-  
-  if (!SD.begin(SD_CS, spi))
+  if (!SD.begin(SD_CS, SPI, 4000000))
   {
-    Serial.println("SD Card initialization failed!");
+    Serial.println("SD Card Mount Failed!");
     SPI_OFF_SD;
-    SPI_ON_TFT;
-    tft.fillScreen(TFT_RED);
-    tft.setCursor(10, 150);
-    tft.println("SD Card Error!");
-    SPI_OFF_TFT;
     while (1)
-    {
       delay(1000);
-    }
   }
+  Serial.println("SD Card Mount Succeeded");
 
-  Serial.println("SD Card initialized successfully");
-  
-  // Disable SD, enable TFT for display
-  SPI_OFF_SD;
-  SPI_ON_TFT;
-  
-  tft.fillScreen(TFT_BLACK);
-  tft.setCursor(10, 150);
-  tft.println("SD Card OK!");
-  delay(1000);
-
-  // Scan for JPG files
-  tft.fillScreen(TFT_BLACK);
-  tft.setCursor(10, 150);
-  tft.println("Scanning for images...");
-  
-  SPI_OFF_TFT;
-
-  scanSDCard();
-
-  if (imageCount == 0)
+  // Get list of JPG files
+  file_num = get_pic_list(SD, "/", 0, file_list);
+  Serial.print("JPG file count: ");
+  Serial.println(file_num);
+  Serial.println("All JPG files:");
+  for (int i = 0; i < file_num; i++)
   {
-    Serial.println("No JPG images found on SD card!");
-    SPI_ON_TFT;
-    tft.fillScreen(TFT_YELLOW);
-    tft.setCursor(10, 150);
-    tft.println("No JPG files found!");
-    SPI_OFF_TFT;
-    while (1)
-    {
-      delay(1000);
-    }
+    Serial.println(file_list[i]);
   }
+  SPI_OFF_SD;
 
-  Serial.print("Found ");
-  Serial.print(imageCount);
-  Serial.println(" images");
+  // Initialize Touch Screen
+  // XPT2046 will use the SPI pins defined in tft_setup.h (same as TFT)
+  TOUCH_ON;
+  touch.begin();
+  touch.setRotation(1); // Match TFT rotation
+  TOUCH_OFF;
 
-  SPI_ON_TFT;
-  tft.fillScreen(TFT_BLACK);
-  tft.setCursor(10, 150);
-  tft.print("Found ");
-  tft.print(imageCount);
-  tft.println(" images!");
-  delay(2000);
-
-  tft.fillScreen(TFT_BLACK);
-  SPI_OFF_TFT;
+  Serial.println("Initialization complete!");
 }
+
+long int runtime = millis();
+int flag = 1;
 
 void loop()
 {
-  // Display current image
-  if (imageCount > 0)
+  // Auto-advance images every 10 seconds or when flag is set
+  if ((millis() - runtime > 10000) || flag == 1)
   {
-    displayImage(imageFiles[currentImageIndex]);
+    Serial.print("Displaying image: ");
+    Serial.println(file_list[file_index]);
 
-    // Move to next image
-    currentImageIndex++;
-    if (currentImageIndex >= imageCount)
+    SPI_ON_TFT;
+    tft.fillScreen(TFT_BLACK);
+    SPI_OFF_TFT;
+
+    // Add "/" prefix to filename for SD card path
+    String filepath = "/" + file_list[file_index];
+
+    SPI_ON_SD;
+    TJpgDec.drawSdJpg(0, 0, filepath.c_str());
+    SPI_OFF_SD;
+
+    file_index++;
+    if (file_index >= file_num)
     {
-      currentImageIndex = 0; // Loop back to first image
+      file_index = 0;
+    }
+    runtime = millis();
+    flag = 0;
+  }
+
+  // Check for touch input
+  TOUCH_ON;
+  if (touch.touched())
+  {
+    TS_Point p = touch.getPoint();
+    TOUCH_OFF;
+
+    // XPT2046 raw values are typically 0-4095
+    // Map to screen coordinates (480x320 in landscape)
+    int touch_x = map(p.x, 300, 3800, 0, 480);
+    int touch_y = map(p.y, 300, 3800, 0, 320);
+
+    // Clamp values to screen bounds
+    touch_x = constrain(touch_x, 0, 480);
+    touch_y = constrain(touch_y, 0, 320);
+
+    Serial.print("Touch at X: ");
+    Serial.print(touch_x);
+    Serial.print(", Y: ");
+    Serial.println(touch_y);
+
+    // Right half = next image, Left half = previous image
+    if (touch_x > 240)
+    {
+      Serial.println("Next image");
+      flag = 1;
+    }
+    else
+    {
+      Serial.println("Previous image");
+      file_index = (file_index + file_num - 2) % file_num;
+      flag = 1;
     }
 
-    // Wait before showing next image
-    delay(IMAGE_DISPLAY_TIME);
+    // Wait for touch release
+    delay(200);
+    while (touch.touched())
+    {
+      delay(10);
+    }
   }
+  else
+  {
+    TOUCH_OFF;
+  }
+
+  delay(50); // Small delay to prevent excessive polling
 }
 
-void scanSDCard()
+// Gets all image files in the SD card root directory
+int get_pic_list(fs::FS &fs, const char *dirname, uint8_t levels, String wavlist[30])
 {
-  // Enable SD card for file operations
-  SPI_ON_SD;
-  
-  File root = SD.open("/");
+  Serial.printf("Listing directory: %s\n", dirname);
+  int i = 0;
+
+  File root = fs.open(dirname);
   if (!root)
   {
-    Serial.println("Failed to open root directory");
-    SPI_OFF_SD;
-    return;
+    Serial.println("Failed to open directory");
+    return i;
   }
-
-  imageCount = 0;
+  if (!root.isDirectory())
+  {
+    Serial.println("Not a directory");
+    return i;
+  }
 
   File file = root.openNextFile();
-  while (file && imageCount < 100)
+  while (file)
   {
-    if (!file.isDirectory())
+    if (file.isDirectory())
     {
-      String fileName = String(file.name());
-      
-      // Skip hidden files (starting with .)
-      if (fileName.startsWith(".") || fileName.startsWith("/."))
-      {
-        file.close();
-        file = root.openNextFile();
-        continue;
-      }
-      
-      fileName.toLowerCase();
+      // Skip directories
+    }
+    else
+    {
+      String temp = file.name();
 
-      // Check if file is a JPG
-      if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"))
+      // Skip hidden files (starting with .)
+      if (!temp.startsWith(".") && !temp.startsWith("/."))
       {
-        imageFiles[imageCount] = String(file.name());
-        Serial.print("Found image: ");
-        Serial.println(imageFiles[imageCount]);
-        imageCount++;
+        // Check if file is JPG
+        temp.toLowerCase();
+        if (temp.endsWith(".jpg") || temp.endsWith(".jpeg"))
+        {
+          wavlist[i] = file.name();
+          Serial.print("Found: ");
+          Serial.println(wavlist[i]);
+          i++;
+        }
       }
     }
-    file.close();
     file = root.openNextFile();
   }
-
-  root.close();
-  
-  // Disable SD after operations
-  SPI_OFF_SD;
-}
-
-void displayImage(String filename)
-{
-  Serial.println("====================");
-  Serial.print("Displaying: ");
-  Serial.println(filename);
-  
-  uint32_t freeHeap = ESP.getFreeHeap();
-  Serial.print("Free heap: ");
-  Serial.print(freeHeap);
-  Serial.println(" bytes");
-
-  // Clear screen - enable TFT
-  SPI_OFF_SD;
-  SPI_ON_TFT;
-  tft.fillScreen(TFT_BLACK);
-  SPI_OFF_TFT;
-
-  // Draw JPEG from SD card directly to screen
-  // TJpg_Decoder will call our tft_output callback which manages CS pins
-  // Enable SD for file reading
-  SPI_ON_SD;
-  uint32_t t = millis();
-  TJpgDec.drawSdJpg(0, 0, ("/" + filename).c_str());
-  t = millis() - t;
-  SPI_OFF_SD;
-
-  Serial.print("Time taken: ");
-  Serial.print(t);
-  Serial.println(" ms");
-  
-  freeHeap = ESP.getFreeHeap();
-  Serial.print("Free heap after: ");
-  Serial.print(freeHeap);
-  Serial.println(" bytes");
-  Serial.println("Image displayed successfully!");
-  Serial.println("====================");
+  return i;
 }
