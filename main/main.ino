@@ -110,8 +110,32 @@ void loop()
     // Add "/" prefix to filename for SD card path
     String filepath = "/" + file_list[file_index];
 
+    // Get image dimensions to center it
+    uint16_t img_w = 0, img_h = 0;
     SPI_ON_SD;
-    TJpgDec.drawSdJpg(0, 0, filepath.c_str());
+    TJpgDec.getFsJpgSize(&img_w, &img_h, filepath.c_str(), SD);
+
+    // Calculate centered position
+    int16_t x_pos = (tft.width() - img_w) / 2;
+    int16_t y_pos = (tft.height() - img_h) / 2;
+
+    // Ensure position is not negative
+    if (x_pos < 0)
+      x_pos = 0;
+    if (y_pos < 0)
+      y_pos = 0;
+
+    Serial.print("Image size: ");
+    Serial.print(img_w);
+    Serial.print("x");
+    Serial.print(img_h);
+    Serial.print(" - Drawing at position (");
+    Serial.print(x_pos);
+    Serial.print(", ");
+    Serial.print(y_pos);
+    Serial.println(")");
+
+    TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
     SPI_OFF_SD;
 
     file_index++;
