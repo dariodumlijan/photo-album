@@ -14,11 +14,16 @@ A digital photo frame built with ESP32 that displays images from a MicroSD card 
 
 ## Features
 
-- 📸 Automatic slideshow with configurable interval (default: 5 seconds)
-- 👆 Touch navigation (tap left/right to go backward/forward)
-- 🖼️ Centered image display with aspect ratio preservation
-- 🔄 Supports multiple image formats through preprocessing
-- 📁 Reads all JPG images from SD card root directory
+- 📸 **Automatic slideshow** with dynamically configurable intervals
+  - **Multi-tap center control**: 1-tap = 5 sec, 2-tap = 30 sec, 3-tap = 1 min, 4-tap = 5 min, 5-tap = manual mode
+  - **On-screen feedback**: Visual confirmation of current timing setting
+- 👆 **Enhanced touch navigation** with three distinct areas:
+  - **Left third**: Previous image
+  - **Center third**: Multi-tap interval configuration
+  - **Right third**: Next image
+- 🖼️ **Centered image display** with aspect ratio preservation
+- 🔄 **Supports multiple image formats** through preprocessing
+- 📁 **Reads all JPG images** from SD card root directory
 
 ## Board Configuration
 
@@ -261,17 +266,55 @@ pio run --target upload --upload-port /dev/cu.usbserial-*  # macOS
 
 ### Navigation
 
-- **Auto-advance**: Images change every 5 seconds (configurable)
-- **Touch left side**: Go to previous image
-- **Touch right side**: Go to next image
+#### Touch Controls (Three-Area System)
+
+The touchscreen is divided into three functional areas:
+
+- **Left third (0-160px)**: Navigate to **previous image**
+- **Center third (160-320px)**: **Multi-tap configuration** for slideshow timing
+  - **1 tap**: 5 seconds interval
+  - **2 taps**: 30 seconds interval
+  - **3 taps**: 1 minute interval
+  - **4 taps**: 5 minutes interval
+  - **5+ taps**: Manual mode (infinite delay - no auto-advance)
+- **Right third (320-480px)**: Navigate to **next image**
+
+When you change the timing via center taps, an on-screen message displays the new setting for 3 seconds.
+
+#### Physical Controls
+
 - **Boot button**: Press to toggle display on/off (backlight control)
 
 ### Customization
 
-Edit [`src/main.cpp`](./src/main.cpp:1) to customize:
+#### User Configuration (Runtime)
+
+- **Slideshow timing**: Use the center touch area multi-tap system to change intervals on-the-fly
+- **Manual mode**: 5+ center taps disables auto-advance for manual-only navigation
+
+#### Developer Configuration
+
+Edit [`src/main.cpp`](./src/main.cpp:1) to customize behavior constants:
 
 ```cpp
-#define IMAGE_SWITCH_DELAY 5000 // Change slideshow interval (milliseconds)
+// Multi-tap configurations for image delay: {taps, delay, label}
+ImageDelayConfig delay_configs[] = {
+    {1, 5000, "5 sec"},   // 1 tap: 5 seconds
+    {2, 30000, "30 sec"}, // 2 taps: 30 seconds
+    {3, 60000, "1 min"},  // 3 taps: 1 minute
+    {4, 300000, "5 min"}, // 4 taps: 5 minutes
+    {5, 0, "Infinite"}    // 5 taps: manual mode (infinite delay)
+};
+
+// Button and touch behavior settings
+#define BUTTON_DEBOUNCE 300       // Button debounce time in milliseconds
+#define TOUCH_DEBOUNCE 300        // Touch debounce time
+#define MULTI_TAP_WINDOW 1000     // Time window for detecting multiple taps (milliseconds)
+#define MESSAGE_DISPLAY_TIME 3000 // Time to show on-screen messages (3 seconds)
+
+// Center screen area for multi-tap detection (x-coordinates)
+#define CENTER_TOUCH_LEFT 160     // Left boundary of center area (160px from left)
+#define CENTER_TOUCH_RIGHT 320    // Right boundary of center area (320px from left)
 ```
 
 ## Touch Calibration
@@ -336,7 +379,14 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 ### Touch not working
 
 - Run the calibration sketch in [`calibration/touch.cpp`](./calibration/touch.cpp)
-- Update calibration values in [`src/main.cpp`](./src/main.cpp)
+- Update calibration values in [`src/main.cpp`](./src/main.cpp:184)
+
+### Multi-tap not responding
+
+- Verify you're tapping in the center area (160-320px width)
+- Ensure taps are quick and within the multi-tap window (default: 1 second)
+- Check that messages appear briefly at the top of screen when changing settings
+- Use serial monitor to debug tap detection: `pio device monitor`
 
 ### Build or compilation errors
 
@@ -347,6 +397,16 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 ## Changelog
 
 ### Recent Updates
+
+#### Enhanced Touch Navigation and Multi-Tap Configuration (Latest)
+
+- **Multi-tap slideshow control**: Center screen area now supports 1-5 taps to configure image display intervals
+  - 1 tap: 5 seconds, 2 taps: 30 seconds, 3 taps: 1 minute, 4 taps: 5 minutes, 5+ taps: manual mode
+- **Three-area touch system**: Screen divided into left (previous), center (config), and right (next) touch areas
+- **On-screen feedback**: Displays current timing setting as a message overlay for 3 seconds
+- **Configurable timing constants**: Developer-friendly constants for debounce times, tap windows, and touch areas
+- **Improved touch handling**: Separate debounce handling for navigation vs configuration touches
+- **Manual mode**: Option to disable auto-advance completely via 5+ center taps
 
 #### Image Preparation Pipeline Script
 
