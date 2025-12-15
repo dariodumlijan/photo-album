@@ -1,6 +1,6 @@
 # ESP32 Photo Frame
 
-A digital photo frame built with ESP32 that displays images from a MicroSD card on a 3.5" TFT touchscreen display.
+A digital photo frame built with ESP32 that displays images from a MicroSD card on a 3.5" TFT touchscreen display. This project uses PlatformIO for development and dependency management.
 
 ## Hardware Requirements
 
@@ -52,53 +52,103 @@ This project is specifically configured for the **3.5" ESP32-32E Display**. The 
 - **Touch Frequency**: 2.5 MHz
 - **SPI Port**: HSPI (for TFT) / VSPI (for SD card)
 
-> ⚠️ **Important**: The configuration files in the [`replace/`](./replace) directory must be copied to your TFT_eSPI library installation to match this specific hardware setup. See [Setup Instructions](#setup-instructions) below.
+> ⚠️ **Important**: The configuration files in the [`replace/`](./replace) directory must be copied to your TFT_eSPI library installation to match this specific hardware setup. See [TFT_eSPI Configuration](#3-configure-tft_espi-library) below.
 
 ## Software Dependencies
 
-### Arduino Libraries (install via Library Manager)
+This project uses [PlatformIO](https://platformio.org/) for development and dependency management. The required libraries are automatically downloaded when you build the project.
 
-- [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) - TFT display driver
-- [TJpg_Decoder](https://github.com/Bodmer/TJpg_Decoder) - JPEG decoder optimized for embedded systems
+### Required Libraries (managed by PlatformIO)
+
+- [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) v2.5.43 - TFT display driver
+- [TJpg_Decoder](https://github.com/Bodmer/TJpg_Decoder) v1.1.0 - JPEG decoder optimized for embedded systems
+
+### Platform
+
+- ESP32 (Espressif32 platform v6.5.0)
+- Arduino Framework
 
 ## Setup Instructions
 
-### 1. Install Arduino IDE and ESP32 Board Support
+### 1. Install PlatformIO
 
-1. Download and install [Arduino IDE](https://www.arduino.cc/en/software)
-2. Add ESP32 board support:
-   - Go to **File → Preferences**
-   - Add to "Additional Board Manager URLs": `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
-   - Go to **Tools → Board → Boards Manager**
-   - Search for "esp32" and install "esp32 by Espressif Systems"
+Choose one of the following methods:
 
-### 2. Install Required Libraries
+**Option A: VS Code Extension (Recommended)**
 
-Open Arduino IDE:
+1. Install [Visual Studio Code](https://code.visualstudio.com/)
+2. Install the PlatformIO IDE extension from the VS Code marketplace
+3. Restart VS Code
 
-1. Go to **Sketch → Include Library → Manage Libraries**
-2. Install:
-   - **TFT_eSPI** by Bodmer
-   - **TJpg_Decoder** by Bodmer
+**Option B: PlatformIO Core (CLI)**
+
+```bash
+pip install -U platformio
+```
+
+### 2. Clone and Open the Project
+
+```bash
+git clone <your-repo-url>
+cd photo-frame
+```
+
+If using VS Code with PlatformIO:
+
+- Open the `photo-frame` folder in VS Code
+- PlatformIO will automatically detect the project
 
 ### 3. Configure TFT_eSPI Library
 
-The TFT_eSPI library needs to be configured for the specific display hardware:
+**Critical Step**: The TFT_eSPI library requires hardware-specific configuration files. The [`replace/`](./replace) directory contains two essential configuration files that must be copied to your local TFT_eSPI library installation:
 
-1. Locate your TFT_eSPI library installation directory:
+#### Configuration Files Explained
 
-   - **Windows**: `Documents\Arduino\libraries\TFT_eSPI\`
-   - **macOS**: `~/Documents/Arduino/libraries/TFT_eSPI/`
-   - **Linux**: `~/Arduino/libraries/TFT_eSPI/`
+1. **[`replace/User_Setup.h`](./replace/User_Setup.h)** - Main TFT_eSPI configuration
 
-2. Copy configuration files from this project:
+   - Selects the **ST7796** display driver (line 59)
+   - Configures **ESP32 pin assignments** for the 3.5" ESP32-32E Display:
+     - TFT connections (HSPI bus): MISO=12, MOSI=13, SCLK=14, CS=15, DC=2, RST=-1
+     - Touch screen CS: GPIO 33
+     - Backlight control: GPIO 27
+   - Sets **SPI frequency** to 80MHz for fast display updates (line 358)
+   - Sets **touch frequency** to 2.5MHz for XPT2046 touch controller (line 364)
+   - Enables **HSPI port** usage (line 369) so VSPI remains free for SD card
+   - Loads required fonts for any text display needs
+
+2. **[`replace/ST7796_Init.h`](./replace/ST7796_Init.h)** - Display initialization sequence
+   - Contains the low-level command sequence to initialize the ST7796 controller
+   - Configures display parameters: color mode, memory access control, power settings
+   - Sets gamma correction curves for proper color reproduction
+   - This initialization sequence is specifically tuned for the 3.5" ESP32-32E Display
+
+#### Installation Steps
+
+1. **Build the project once** to download libraries:
 
    ```bash
-   cp replace/User_Setup.h <TFT_eSPI_dir>/User_Setup.h
-   cp replace/ST7796_Init.h <TFT_eSPI_dir>/TFT_Drivers/ST7796_Init.h
+   pio run
    ```
 
-3. Or manually update these files with the settings from the [`replace/`](./replace) directory
+2. **Locate your TFT_eSPI library directory:**
+
+   - PlatformIO installs libraries in: `.pio/libdeps/esp32dev/TFT_eSPI/`
+   - This is relative to your project directory
+
+3. **Copy the configuration files:**
+
+   ```bash
+   # From the project root directory
+   cp replace/User_Setup.h .pio/libdeps/esp32dev/TFT_eSPI/User_Setup.h
+   cp replace/ST7796_Init.h .pio/libdeps/esp32dev/TFT_eSPI/TFT_Drivers/ST7796_Init.h
+   ```
+
+4. **Rebuild the project** to apply the configuration:
+   ```bash
+   pio run
+   ```
+
+> **Note**: You need to copy these files each time you clean the PlatformIO library cache or switch environments, as PlatformIO may re-download fresh library copies.
 
 ### 4. Prepare Your Images
 
@@ -169,14 +219,37 @@ The project includes a [`randomize.sh`](./scripts/randomize.sh) script to shuffl
 2. Copy your prepared JPG images to the **root directory** of the SD card
 3. Safely eject the card
 
-### 6. Upload the Code
+### 6. Build and Upload the Code
 
-1. Open [`main/main.ino`](./main/main.ino) in Arduino IDE
-2. Select your board:
-   - **Tools → Board → ESP32 Arduino → ESP32 Dev Module**
-3. Select the correct port:
-   - **Tools → Port → [your ESP32 port]**
-4. Click **Upload** (or press Ctrl+U)
+**Using VS Code with PlatformIO:**
+
+1. Connect your ESP32 board via USB
+2. Click the **PlatformIO: Upload** button (→ icon) in the status bar
+3. Or use the Command Palette (Ctrl+Shift+P): "PlatformIO: Upload"
+
+**Using PlatformIO CLI:**
+
+```bash
+# Build the project
+pio run
+
+# Upload to the board (auto-detects port)
+pio run --target upload
+
+# Monitor serial output
+pio device monitor
+
+# Or combine upload and monitor
+pio run --target upload && pio device monitor
+```
+
+**Specifying a port manually:**
+
+```bash
+pio run --target upload --upload-port /dev/ttyUSB0  # Linux
+pio run --target upload --upload-port COM3          # Windows
+pio run --target upload --upload-port /dev/cu.usbserial-*  # macOS
+```
 
 ## Usage
 
@@ -195,7 +268,7 @@ The project includes a [`randomize.sh`](./scripts/randomize.sh) script to shuffl
 
 ### Customization
 
-Edit [`main/main.ino`](./main/main.ino:1) to customize:
+Edit [`src/main.cpp`](./src/main.cpp:1) to customize:
 
 ```cpp
 #define IMAGE_SWITCH_DELAY 5000 // Change slideshow interval (milliseconds)
@@ -205,10 +278,10 @@ Edit [`main/main.ino`](./main/main.ino:1) to customize:
 
 The touch screen is pre-calibrated for landscape mode. If you need to recalibrate:
 
-1. Open [`calibrate/calibrate.ino`](./calibrate/calibrate.ino)
-2. Upload to your ESP32
-3. Follow the on-screen instructions
-4. Update the calibration data in [`main/main.ino`](./main/main.ino:62):
+1. The calibration sketch is in [`calibration/touch.cpp`](./calibration/touch.cpp)
+2. Temporarily rename it to main.cpp or modify platformio.ini to use it
+3. Upload to your ESP32 and follow on-screen instructions
+4. Update the calibration data in [`src/main.cpp`](./src/main.cpp:122):
 
 ```cpp
 uint16_t calData[5] = {257, 3677, 223, 3571, 7};
@@ -218,20 +291,26 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 
 ```
 .
-├── main/
-│   └── main.ino              # Main photo frame application
-├── calibrate/
-│   └── calibrate.ino         # Touch screen calibration utility
+├── platformio.ini            # PlatformIO project configuration
+├── src/
+│   └── main.cpp              # Main photo frame application
+├── calibration/
+│   └── touch.cpp             # Touch screen calibration utility
 ├── replace/
+│   ├── README.md             # Configuration file installation guide
 │   ├── User_Setup.h          # TFT_eSPI configuration for ESP32-32E Display
 │   └── ST7796_Init.h         # ST7796 driver initialization sequence
 ├── scripts/
 │   ├── prepare.sh            # Image preparation script
-│   └── randomize.sh          # Image randomization script
+│   ├── randomize.sh          # Image randomization script
+│   └── pipeline.sh           # Combined preparation and randomization
 ├── assets/
 │   ├── root/                 # Place original images here
 │   └── target/               # Processed images (copy to SD card)
-└── README.md
+├── include/                  # Header files (if needed)
+├── lib/                      # Project-specific libraries
+├── test/                     # Unit tests
+└── README.md                 # This file
 ```
 
 ## Troubleshooting
@@ -256,8 +335,14 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 
 ### Touch not working
 
-- Run the calibration sketch in [`calibrate/`](./calibrate)
-- Update calibration values in main sketch
+- Run the calibration sketch in [`calibration/touch.cpp`](./calibration/touch.cpp)
+- Update calibration values in [`src/main.cpp`](./src/main.cpp)
+
+### Build or compilation errors
+
+- Ensure you've copied the configuration files from [`replace/`](./replace) directory
+- Clean the build and rebuild: `pio run --target clean && pio run`
+- Check that the TFT_eSPI library was downloaded: verify `.pio/libdeps/esp32dev/TFT_eSPI/` exists
 
 ## Changelog
 
