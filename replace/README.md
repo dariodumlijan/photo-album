@@ -1,0 +1,2 @@
+- `replace/ST7796_Init.h` -> `.pio/libdeps/esp32dev/TFT_eSPI/TFT_Drivers/ST7796_Init.h`
+- `replace/User_Setup.h` -> `.pio/libdeps/esp32dev/TFT_eSPI/User_Setup.h`

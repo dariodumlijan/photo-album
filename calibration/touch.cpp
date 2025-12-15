@@ -5,6 +5,7 @@
   The sketch has been tested on the ESP32 and screen with XPT2046 driver.
 */
 
+#include <Arduino.h>
 #include <SPI.h>
 #include <TFT_eSPI.h> // Hardware-specific library
 

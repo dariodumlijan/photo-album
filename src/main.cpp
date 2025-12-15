@@ -1,5 +1,6 @@
 #define IMAGE_SWITCH_DELAY 5000 // delay between images in milliseconds
 
+#include <Arduino.h>
 #include <SPI.h>
 #include "SD.h"
 #include "FS.h"
@@ -27,6 +28,52 @@ TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 // SPI control macros
 #define SPI_ON_SD digitalWrite(SD_CS, LOW)
 #define SPI_OFF_SD digitalWrite(SD_CS, HIGH)
+
+// Gets all image files in the SD card root directory
+void get_pic_list(fs::FS &fs, const char *dirname, uint8_t levels, std::vector<String> &wavlist)
+{
+  Serial.printf("Listing directory: %s\n", dirname);
+  wavlist.clear(); // Clear any existing entries
+
+  File root = fs.open(dirname);
+  if (!root)
+  {
+    Serial.println("Failed to open directory");
+    return;
+  }
+  if (!root.isDirectory())
+  {
+    Serial.println("Not a directory");
+    return;
+  }
+
+  File file = root.openNextFile();
+  while (file)
+  {
+    if (file.isDirectory())
+    {
+      // Skip directories
+    }
+    else
+    {
+      String temp = file.name();
+
+      // Skip hidden files (starting with .)
+      if (!temp.startsWith(".") && !temp.startsWith("/."))
+      {
+        // Check if file is JPG
+        temp.toLowerCase();
+        if (temp.endsWith(".jpg"))
+        {
+          wavlist.push_back(file.name());
+          Serial.print("Found: ");
+          Serial.println(wavlist.back());
+        }
+      }
+    }
+    file = root.openNextFile();
+  }
+}
 
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
 {
@@ -231,50 +278,4 @@ void loop()
   }
 
   delay(50); // Small delay to prevent excessive polling
-}
-
-// Gets all image files in the SD card root directory
-void get_pic_list(fs::FS &fs, const char *dirname, uint8_t levels, std::vector<String> &wavlist)
-{
-  Serial.printf("Listing directory: %s\n", dirname);
-  wavlist.clear(); // Clear any existing entries
-
-  File root = fs.open(dirname);
-  if (!root)
-  {
-    Serial.println("Failed to open directory");
-    return;
-  }
-  if (!root.isDirectory())
-  {
-    Serial.println("Not a directory");
-    return;
-  }
-
-  File file = root.openNextFile();
-  while (file)
-  {
-    if (file.isDirectory())
-    {
-      // Skip directories
-    }
-    else
-    {
-      String temp = file.name();
-
-      // Skip hidden files (starting with .)
-      if (!temp.startsWith(".") && !temp.startsWith("/."))
-      {
-        // Check if file is JPG
-        temp.toLowerCase();
-        if (temp.endsWith(".jpg"))
-        {
-          wavlist.push_back(file.name());
-          Serial.print("Found: ");
-          Serial.println(wavlist.back());
-        }
-      }
-    }
-    file = root.openNextFile();
-  }
 }
