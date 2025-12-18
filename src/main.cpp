@@ -1,18 +1,23 @@
 // ====== UX CONFIGURATION ======
-// Multi-tap configurations for image delay: {taps, delay, label}
+// Image delay configurations: {delay, label}
 struct ImageDelayConfig
 {
-  int taps;
   unsigned long delay;
   const char *label;
 };
 
 ImageDelayConfig delay_configs[] = {
-    {1, 10000, "10 sec"}, // 1 tap: 10 seconds
-    {2, 30000, "30 sec"}, // 2 taps: 30 seconds
-    {3, 60000, "1 min"},  // 3 taps: 1 minute
-    {4, 300000, "5 min"}, // 4 taps: 5 minutes
-    {5, 0, "Infinite"}    // 5 taps: manual mode (infinite delay)
+    {10000, "10 sec"},
+    {30000, "30 sec"},
+    {60000, "1 min"},
+    {120000, "2 min"},
+    {300000, "5 min"},
+    {600000, "10 min"},
+    {900000, "15 min"},
+    {1800000, "30 min"},
+    {2700000, "45 min"},
+    {3600000, "1 h"},
+    {0, "Infinite"} // manual mode (infinite delay)
 };
 #define NUM_DELAY_CONFIGS (sizeof(delay_configs) / sizeof(delay_configs[0]))
 
@@ -20,10 +25,9 @@ ImageDelayConfig delay_configs[] = {
 unsigned long IMAGE_LIFETIME = delay_configs[0].delay;
 
 // Button and touch behavior settings - easily adjustable by developers
-#define BUTTON_DEBOUNCE 300       // Button debounce time in milliseconds
-#define TOUCH_DEBOUNCE 300        // Touch debounce time
-#define MULTI_TAP_WINDOW 1000     // Time window for detecting multiple taps (milliseconds)
-#define MESSAGE_DISPLAY_TIME 3000 // Time to show on-screen messages (3 seconds)
+#define BUTTON_DEBOUNCE 300   // Button debounce time in milliseconds
+#define TOUCH_DEBOUNCE 150    // Touch debounce time
+#define MULTI_TAP_WINDOW 1000 // Time window for detecting multiple taps (milliseconds)
 
 // Center screen area for multi-tap detection (x-coordinates)
 #define CENTER_TOUCH_LEFT 160  // Left boundary of center area (160px from left)
@@ -67,17 +71,16 @@ int taps = 0;
 unsigned long tapped_at = 0;
 unsigned long touched_at = 0;
 
-// message display
-bool message_visible = false;
-unsigned long message_shown_at = 0;
-String current_message = "";
+// settings screen
+bool settings_screen_visible = false;
+int current_delay_index = 0; // Index into delay_configs array
 
 // runtime variables
 bool force_refresh = true;
 unsigned long runtime = 0;
 
 // Gets all image files in the SD card root directory
-void get_pic_list(fs::FS &fs, const char *dirname, uint8_t levels, std::vector<String> &wavlist)
+void get_pic_list(fs::FS &fs, const char *dirname, std::vector<String> &wavlist)
 {
   Serial.printf("Listing directory: %s\n", dirname);
   wavlist.clear(); // Clear any existing entries
@@ -131,39 +134,67 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
   // This function will clip the image block rendering automatically at the TFT boundaries
   tft.pushImage(x, y, w, h, bitmap);
 
-  // This might work instead if you adapt the sketch to use the Adafruit_GFX library
-  // tft.drawRGBBitmap(x, y, bitmap, w, h);
-
   // Return 1 to decode next block
   return 1;
 }
 
-// Function to display a centered message on screen for a specific duration
-void showMessage(String message)
+// Function to display the settings screen
+void showSettingsScreen()
 {
-  message_visible = true;
-  message_shown_at = millis();
-  current_message = message;
+  // Define UI color palette
+  uint16_t button_bg = TFT_MAGENTA;
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
 
-  // Show message
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  // Draw title
+  String title = "Frame Interval";
+  int16_t title_width = title.length() * 18; // Approximate character width
+  int16_t title_x = (tft.width() - title_width) / 2 + 2;
+  tft.setTextSize(3);
+  tft.setCursor(title_x, 50);
+  tft.print(title);
+
+  // Draw current delay label in center with 20px margins
+  String label = String(delay_configs[current_delay_index].label);
+  int16_t label_width = label.length() * 18; // Approximate width for size 3
+  int16_t label_x = (tft.width() - label_width) / 2;
+  int16_t label_y = tft.height() / 2 - 12;
+  tft.setTextSize(3);
+  tft.setCursor(label_x, label_y);
+  tft.print(label);
+
+  // Draw +/- buttons
+  tft.setTextSize(4);
+  int16_t char_height = 28; // Approximate height at size 4
+  int16_t char_width = 20;  // Approximate width at size 4
+  int16_t button_size = 60;
+  int16_t button_radius = 10;
+  int16_t margin = 60;
+  int16_t button_y = tft.height() / 2 - (button_size / 2);
+
+  // - button (left side with margin)
+  tft.fillRoundRect(margin, button_y, button_size, button_size, button_radius, button_bg);
+  tft.setCursor(margin + (button_size - char_width) / 2, button_y + (button_size - char_height) / 2);
+  tft.print("-");
+
+  // + button (right side with margin)
+  int16_t plus_x = tft.width() - margin - button_size;
+  tft.fillRoundRect(plus_x, button_y, button_size, button_size, button_radius, button_bg);
+  tft.setCursor(plus_x + (button_size - char_width) / 2, button_y + (button_size - char_height) / 2);
+  tft.print("+");
+
+  // Draw Save & Close button at bottom with extended width
+  int16_t close_y = tft.height() - 80;
+  int16_t close_button_width = 180; // Extended width to fit text
+  int16_t close_x = (tft.width() - close_button_width) / 2;
+  tft.fillRoundRect(close_x, close_y, close_button_width, 50, button_radius, button_bg);
   tft.setTextSize(2);
 
-  // Calculate text dimensions
-  int16_t text_width = message.length() * 12; // Approximate character width
-  int16_t text_height = 16;                   // Approximate text height for size 2
-  int16_t padding = 8;                        // Padding above and below text
-
-  // Position text at top center
-  int16_t x_pos = (tft.width() - text_width) / 2;
-  int16_t y_pos = padding; // Position at top with padding
-
-  // Draw black bar spanning full width with padding
-  int16_t bar_height = text_height + (2 * padding);
-  tft.fillRect(0, 0, tft.width(), bar_height, TFT_BLACK);
-
-  tft.setCursor(x_pos, y_pos);
-  tft.print(message);
+  // Center "Save & Close" text in the button
+  String close_text = "Save & Close";
+  int16_t close_text_width = close_text.length() * 12; // Approximate width for size 2
+  tft.setCursor(close_x + (close_button_width - close_text_width) / 2, close_y + 18);
+  tft.print(close_text);
 }
 
 void setup(void)
@@ -213,7 +244,7 @@ void setup(void)
   Serial.println("SD Card Mount Succeeded");
 
   // Get list of JPG files
-  get_pic_list(SD, "/", 0, file_list);
+  get_pic_list(SD, "/", file_list);
   Serial.print("JPG file count: ");
   Serial.println(file_list.size());
 
@@ -252,25 +283,15 @@ void loop()
     delay(BUTTON_DEBOUNCE);
   }
 
-  // Check if we need to clear a message that has been displayed long enough
-  if (message_visible && (millis() - message_shown_at >= MESSAGE_DISPLAY_TIME))
-  {
-    message_visible = false;
-    tft.fillScreen(TFT_BLACK); // Clear message
-    force_refresh = true;      // Force image refresh
-  }
-
-  // Auto-advance images every x seconds or when force_refresh is set (only when display is on and not showing message)
+  // Auto-advance images every x seconds or when force_refresh is set (only when display is on and not showing settings)
   // Skip auto-advance if IMAGE_LIFETIME is 0 (manual mode) unless force_refresh is set for manual navigation
-  if (display_on && !message_visible && (((IMAGE_LIFETIME > 0) && (millis() - runtime >= IMAGE_LIFETIME)) || force_refresh))
+  if (display_on && !settings_screen_visible && (((IMAGE_LIFETIME > 0) && (millis() - runtime >= IMAGE_LIFETIME)) || force_refresh))
   {
     // Let TFT_eSPI manage CS internally
     tft.fillScreen(TFT_BLACK);
 
     // Add "/" prefix to filename for SD card path
     String filepath = "/" + file_list[file_index];
-
-    bool image_rendered = false;
 
     // Wrap image rendering with error handling
     // Get image dimensions to center it
@@ -293,11 +314,7 @@ void loop()
       // Try to draw the image
       result = TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
 
-      if (result == 0)
-      {
-        image_rendered = true;
-      }
-      else
+      if (result != 0)
       {
         Serial.print("Error drawing image (error code: ");
         Serial.print(result);
@@ -322,34 +339,17 @@ void loop()
     force_refresh = false;
   }
 
-  // Process pending multi-taps after window expires
-  if (taps > 0 && (millis() - tapped_at >= MULTI_TAP_WINDOW))
+  // Process pending multi-taps after window expires - check for 2 taps to open settings
+  if (taps == 2 && (millis() - tapped_at >= MULTI_TAP_WINDOW))
   {
-    // Set delay based on tap count and show message
-    bool config_found = false;
-    for (int i = 0; i < NUM_DELAY_CONFIGS; i++)
-    {
-
-      if (delay_configs[i].taps == taps)
-      {
-        IMAGE_LIFETIME = delay_configs[i].delay;
-        showMessage("Photo's lifetime: " + String(delay_configs[i].label));
-        config_found = true;
-        break;
-      }
-    }
-
-    // If tap count exceeds configured options, use the last (highest) config
-    if (!config_found)
-    {
-      Serial.println("No config found, using default");
-      IMAGE_LIFETIME = delay_configs[NUM_DELAY_CONFIGS - 1].delay;
-      showMessage("Photo's lifetime: " + String(delay_configs[NUM_DELAY_CONFIGS - 1].label));
-    }
-
-    // Reset image timer to apply new delay
-    runtime = millis();
+    settings_screen_visible = true;
+    showSettingsScreen();
     taps = 0; // Reset tap count after processing
+  }
+  else if (taps > 0 && (millis() - tapped_at >= MULTI_TAP_WINDOW))
+  {
+    // Reset tap count if not 2 taps
+    taps = 0;
   }
 
   // Check for touch input using TFT_eSPI's built-in touch support
@@ -358,60 +358,135 @@ void loop()
   // getTouch returns true if touch is detected, threshold filters light touches
   if (tft.getTouch(&touch_x, &touch_y, 600))
   {
-    // Check if touch is in center area (160-320 px width) for delay control
-    if (touch_x >= CENTER_TOUCH_LEFT && touch_x <= CENTER_TOUCH_RIGHT)
+    if (settings_screen_visible)
     {
-      // Center tap for changing image delay - no debounce needed for multi-tap
+      // Handle settings screen touches
+      int16_t button_size = 60;
+      int16_t button_y = tft.height() / 2 - (button_size / 2);
+      int16_t margin = 60;
+      int16_t minus_x = margin;
+      int16_t plus_x = tft.width() - margin - button_size;
+      int16_t close_y = tft.height() - 80;
+      int16_t close_button_width = 180;
+      int16_t close_button_height = 50;
+      int16_t close_x = (tft.width() - close_button_width) / 2;
 
-      if (millis() - tapped_at < MULTI_TAP_WINDOW && tapped_at > 0)
+      // Check for - button (left side)
+      if (touch_x >= minus_x && touch_x <= (minus_x + button_size) &&
+          touch_y >= button_y && touch_y <= (button_y + button_size))
       {
-        taps++;
-        Serial.print("Incremented taps to: ");
-        Serial.println(taps);
+        // Decrease delay index
+        current_delay_index--;
+        if (current_delay_index < 0)
+        {
+          current_delay_index = NUM_DELAY_CONFIGS - 1; // Wrap to end
+        }
+        IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
+        showSettingsScreen();
+
+        // Wait for touch release
+        while (tft.getTouch(&touch_x, &touch_y, 600))
+        {
+          delay(50);
+        }
+        delay(200); // Debounce
       }
-      else
+      // Check for + button (right side)
+      else if (touch_x >= plus_x && touch_x <= (plus_x + button_size) &&
+               touch_y >= button_y && touch_y <= (button_y + button_size))
       {
-        taps = 1; // Start new tap sequence
-        Serial.println("Starting new tap sequence");
+        // Increase delay index
+        current_delay_index++;
+        if (current_delay_index >= NUM_DELAY_CONFIGS)
+        {
+          current_delay_index = 0; // Wrap to start
+        }
+        IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
+        showSettingsScreen();
+
+        // Wait for touch release
+        while (tft.getTouch(&touch_x, &touch_y, 600))
+        {
+          delay(50);
+        }
+        delay(200); // Debounce
       }
-
-      tapped_at = millis();
-
-      // Wait for touch release
-      while (tft.getTouch(&touch_x, &touch_y, 600))
+      // Check for Close button
+      else if (touch_x >= close_x && touch_x <= (close_x + close_button_width) &&
+               touch_y >= close_y && touch_y <= (close_y + close_button_height))
       {
-        delay(50);
-      }
+        // Close settings and return to slideshow
+        settings_screen_visible = false;
+        tft.fillScreen(TFT_BLACK);
+        force_refresh = true;
+        runtime = millis(); // Reset timer
 
-      // Short delay to prevent immediate re-trigger from same touch
-      delay(50);
+        // Wait for touch release
+        while (tft.getTouch(&touch_x, &touch_y, 600))
+        {
+          delay(50);
+        }
+        delay(200); // Debounce
+      }
     }
-    else if ((touch_x < CENTER_TOUCH_LEFT || touch_x > CENTER_TOUCH_RIGHT) &&
-             (millis() - touched_at > TOUCH_DEBOUNCE))
+    else
     {
-      // Side touches (left/right) need debounce to prevent accidental navigation
-      touched_at = millis();
+      // Normal slideshow touch handling
+      // Check if touch is in center area (160-320 px width) for delay control
+      if (touch_x >= CENTER_TOUCH_LEFT && touch_x <= CENTER_TOUCH_RIGHT)
+      {
+        // Center tap for changing image delay - no debounce needed for multi-tap
 
-      if (touch_x < CENTER_TOUCH_LEFT)
-      {
-        // Left side = previous image
-        file_index = (file_index + file_list.size() - 2) % file_list.size();
-        force_refresh = true;
-      }
-      else if (touch_x > CENTER_TOUCH_RIGHT)
-      {
-        // Right side = next image
-        force_refresh = true;
-      }
+        if (millis() - tapped_at < MULTI_TAP_WINDOW && tapped_at > 0)
+        {
+          taps++;
+          Serial.print("Incremented taps to: ");
+          Serial.println(taps);
+        }
+        else
+        {
+          taps = 1; // Start new tap sequence
+          Serial.println("Starting new tap sequence");
+        }
 
-      // Wait for touch release with debounce
-      while (tft.getTouch(&touch_x, &touch_y, 600))
-      {
+        tapped_at = millis();
+
+        // Wait for touch release
+        while (tft.getTouch(&touch_x, &touch_y, 600))
+        {
+          delay(50);
+        }
+
+        // Short delay to prevent immediate re-trigger from same touch
         delay(50);
       }
+      else if ((touch_x < CENTER_TOUCH_LEFT || touch_x > CENTER_TOUCH_RIGHT) &&
+               (millis() - touched_at > TOUCH_DEBOUNCE))
+      {
+        // Side touches (left/right) need debounce to prevent accidental navigation
+        touched_at = millis();
 
-      // Additional debounce after release for side touches only
-      delay(TOUCH_DEBOUNCE);
+        if (touch_x < CENTER_TOUCH_LEFT)
+        {
+          // Left side = previous image
+          file_index = (file_index + file_list.size() - 2) % file_list.size();
+          force_refresh = true;
+        }
+        else if (touch_x > CENTER_TOUCH_RIGHT)
+        {
+          // Right side = next image
+          force_refresh = true;
+        }
+
+        // Wait for touch release with debounce
+        while (tft.getTouch(&touch_x, &touch_y, 600))
+        {
+          delay(50);
+        }
+
+        // Additional debounce after release for side touches only
+        delay(TOUCH_DEBOUNCE);
+      }
     }
   }
 

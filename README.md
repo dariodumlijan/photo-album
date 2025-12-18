@@ -14,12 +14,12 @@ A digital photo frame built with ESP32 that displays images from a MicroSD card 
 
 ## Features
 
-- 📸 **Automatic slideshow** with dynamically configurable intervals
-  - **Multi-tap center control**: 1-tap = 5 sec, 2-tap = 30 sec, 3-tap = 1 min, 4-tap = 5 min, 5-tap = manual mode
-  - **On-screen feedback**: Visual confirmation of current timing setting
+- 📸 **Automatic slideshow** with configurable intervals via settings screen
+  - **11 interval options**: 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, or manual mode (infinite)
+  - **Settings UI**: Double-tap center to open settings screen with +/- buttons
 - 👆 **Enhanced touch navigation** with three distinct areas:
   - **Left third**: Previous image
-  - **Center third**: Multi-tap interval configuration
+  - **Center third**: Double-tap to open settings
   - **Right third**: Next image
 - 🖼️ **Centered image display** with aspect ratio preservation
 - 🔄 **Supports multiple image formats** through preprocessing
@@ -271,15 +271,11 @@ pio run --target upload --upload-port /dev/cu.usbserial-*  # macOS
 The touchscreen is divided into three functional areas:
 
 - **Left third (0-160px)**: Navigate to **previous image**
-- **Center third (160-320px)**: **Multi-tap configuration** for slideshow timing
-  - **1 tap**: 5 seconds interval
-  - **2 taps**: 30 seconds interval
-  - **3 taps**: 1 minute interval
-  - **4 taps**: 5 minutes interval
-  - **5+ taps**: Manual mode (infinite delay - no auto-advance)
+- **Center third (160-320px)**: **Double-tap to open settings screen**
+  - Settings screen displays current interval with +/- buttons to adjust
+  - Available intervals: 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, infinite (manual mode)
+  - Tap "Save & Close" button to return to slideshow
 - **Right third (320-480px)**: Navigate to **next image**
-
-When you change the timing via center taps, an on-screen message displays the new setting for 3 seconds.
 
 #### Physical Controls
 
@@ -289,30 +285,35 @@ When you change the timing via center taps, an on-screen message displays the ne
 
 #### User Configuration (Runtime)
 
-- **Slideshow timing**: Use the center touch area multi-tap system to change intervals on-the-fly
-- **Manual mode**: 5+ center taps disables auto-advance for manual-only navigation
+- **Slideshow timing**: Double-tap center area to open settings screen, use +/- buttons to adjust interval
+- **Manual mode**: Select "Infinite" interval to disable auto-advance for manual-only navigation
 
 #### Developer Configuration
 
 Edit [`src/main.cpp`](./src/main.cpp:1) to customize behavior constants:
 
 ```cpp
-// Multi-tap configurations for image delay: {taps, delay, label}
+// Image delay configurations: {delay, label}
 ImageDelayConfig delay_configs[] = {
-    {1, 5000, "5 sec"},   // 1 tap: 5 seconds
-    {2, 30000, "30 sec"}, // 2 taps: 30 seconds
-    {3, 60000, "1 min"},  // 3 taps: 1 minute
-    {4, 300000, "5 min"}, // 4 taps: 5 minutes
-    {5, 0, "Infinite"}    // 5 taps: manual mode (infinite delay)
+    {10000, "10 sec"},
+    {30000, "30 sec"},
+    {60000, "1 min"},
+    {120000, "2 min"},
+    {300000, "5 min"},
+    {600000, "10 min"},
+    {900000, "15 min"},
+    {1800000, "30 min"},
+    {2700000, "45 min"},
+    {3600000, "1 h"},
+    {0, "Infinite"} // manual mode (infinite delay)
 };
 
 // Button and touch behavior settings
 #define BUTTON_DEBOUNCE 300       // Button debounce time in milliseconds
-#define TOUCH_DEBOUNCE 300        // Touch debounce time
-#define MULTI_TAP_WINDOW 1000     // Time window for detecting multiple taps (milliseconds)
-#define MESSAGE_DISPLAY_TIME 3000 // Time to show on-screen messages (3 seconds)
+#define TOUCH_DEBOUNCE 150        // Touch debounce time
+#define MULTI_TAP_WINDOW 1000     // Time window for detecting double-tap (milliseconds)
 
-// Center screen area for multi-tap detection (x-coordinates)
+// Center screen area for settings access (x-coordinates)
 #define CENTER_TOUCH_LEFT 160     // Left boundary of center area (160px from left)
 #define CENTER_TOUCH_RIGHT 320    // Right boundary of center area (320px from left)
 ```
@@ -379,13 +380,12 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 ### Touch not working
 
 - Run the calibration sketch in [`calibration/touch.cpp`](./calibration/touch.cpp)
-- Update calibration values in [`src/main.cpp`](./src/main.cpp:184)
+- Update calibration values in [`src/main.cpp`](./src/main.cpp:48)
 
-### Multi-tap not responding
+### Settings screen not opening
 
-- Verify you're tapping in the center area (160-320px width)
+- Verify you're double-tapping in the center area (160-320px width)
 - Ensure taps are quick and within the multi-tap window (default: 1 second)
-- Check that messages appear briefly at the top of screen when changing settings
 - Use serial monitor to debug tap detection: `pio device monitor`
 
 ### Build or compilation errors
@@ -398,15 +398,17 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 
 ### Recent Updates
 
-#### Enhanced Touch Navigation and Multi-Tap Configuration (Latest)
+#### Settings Screen UI and Extended Intervals (Latest)
 
-- **Multi-tap slideshow control**: Center screen area now supports 1-5 taps to configure image display intervals
-  - 1 tap: 5 seconds, 2 taps: 30 seconds, 3 taps: 1 minute, 4 taps: 5 minutes, 5+ taps: manual mode
-- **Three-area touch system**: Screen divided into left (previous), center (config), and right (next) touch areas
-- **On-screen feedback**: Displays current timing setting as a message overlay for 3 seconds
-- **Configurable timing constants**: Developer-friendly constants for debounce times, tap windows, and touch areas
-- **Improved touch handling**: Separate debounce handling for navigation vs configuration touches
-- **Manual mode**: Option to disable auto-advance completely via 5+ center taps
+- **Settings screen interface**: Double-tap center area opens dedicated settings UI
+  - Visual display of current interval with title "Frame Interval"
+  - +/- buttons to cycle through available intervals
+  - "Save & Close" button to return to slideshow
+- **Extended interval options**: 11 configurable intervals from 10 seconds to 1 hour, plus infinite (manual mode)
+  - 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, infinite
+- **Improved touch responsiveness**: Reduced touch debounce from 300ms to 150ms
+- **Three-area touch system**: Screen divided into left (previous), center (settings), and right (next) touch areas
+- **Persistent settings**: Selected interval persists until changed via settings screen
 
 #### Image Preparation Pipeline Script
 
