@@ -217,7 +217,32 @@ void setup(void)
   tft.init();
   tft.setRotation(1); // Landscape mode
   tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
   tft.setSwapBytes(true);
+
+  // Display "Booting up..." message
+  tft.setTextSize(4);
+  String boot_title = "Booting up...";
+  int16_t title_width = boot_title.length() * 24; // Approximate width for size 4
+  int16_t title_x = (tft.width() - title_width) / 2;
+  int16_t title_y = (tft.height() / 2) - 40;
+  tft.setCursor(title_x, title_y);
+  tft.print(boot_title);
+
+  // Helper function to display setup steps
+  auto displayStep = [&](const char *step)
+  {
+    tft.setTextSize(2);
+    int16_t step_width = strlen(step) * 12; // Approximate width for size 2
+    int16_t step_x = (tft.width() - step_width) / 2;
+    int16_t step_y = title_y + 50;
+
+    // Clear previous step text area
+    tft.fillRect(0, step_y, tft.width(), 20, TFT_BLACK);
+
+    tft.setCursor(step_x, step_y);
+    tft.print(step);
+  };
 
   // Calibrate touch for rotation 1 (landscape)
   uint16_t calData[5] = TOUCH_CALIBRATION;
@@ -233,24 +258,35 @@ void setup(void)
   SPI.begin(VSPI_SCK, VSPI_MISO, VSPI_MOSI, SD_CS);
 
   // Initialize SD Card on VSPI
+  displayStep("Mounting SD card...");
   SPI_ON_SD;
   if (!SD.begin(SD_CS, SPI, 4000000))
   {
+    displayStep("SD Card Mount Failed!");
     Serial.println("SD Card Mount Failed!");
     SPI_OFF_SD;
     while (1)
       delay(1000);
   }
   Serial.println("SD Card Mount Succeeded");
+  delay(300);
 
   // Get list of JPG files
+  displayStep("Scanning SD card...");
   get_pic_list(SD, "/", file_list);
-  Serial.print("JPG file count: ");
-  Serial.println(file_list.size());
+  delay(300);
+
+  // Display photo count
+  String photo_count = "Found " + String(file_list.size()) + " photos";
+  displayStep(photo_count.c_str());
+  delay(800);
 
   SPI_OFF_SD;
 
   Serial.println("Initialization complete!");
+
+  // Clear screen before starting slideshow
+  tft.fillScreen(TFT_BLACK);
 }
 
 void loop()
