@@ -17,7 +17,7 @@ ImageDelayConfig delay_configs[] = {
     {1800000, "30 min"},
     {2700000, "45 min"},
     {3600000, "1 h"},
-    {0, "Infinite"} // manual mode (infinite delay)
+    {0, "OFF"} // manual mode (infinite delay)
 };
 #define NUM_DELAY_CONFIGS (sizeof(delay_configs) / sizeof(delay_configs[0]))
 
@@ -25,13 +25,20 @@ ImageDelayConfig delay_configs[] = {
 unsigned long IMAGE_LIFETIME = delay_configs[0].delay;
 
 // Button and touch behavior settings - easily adjustable by developers
-#define BUTTON_DEBOUNCE 300   // Button debounce time in milliseconds
-#define TOUCH_DEBOUNCE 150    // Touch debounce time
-#define MULTI_TAP_WINDOW 1000 // Time window for detecting multiple taps (milliseconds)
+#define BUTTON_DEBOUNCE 300  // Button debounce time in milliseconds
+#define TOUCH_DEBOUNCE 150   // Touch debounce time
+#define MULTI_TAP_WINDOW 500 // Time window for detecting multiple taps (milliseconds)
 
-// Center screen area for multi-tap detection (x-coordinates)
-#define CENTER_TOUCH_LEFT 160  // Left boundary of center area (160px from left)
-#define CENTER_TOUCH_RIGHT 320 // Right boundary of center area (320px from left)
+// Screen area config
+#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 320
+
+#define SCREEN_CENTER_X SCREEN_WIDTH / 2
+#define SCREEN_CENTER_Y SCREEN_HEIGHT / 2
+
+#define TOUCH_SECTIONS SCREEN_WIDTH / 3
+#define CENTER_TOUCH_LEFT TOUCH_SECTIONS * 1  // Left boundary of center area
+#define CENTER_TOUCH_RIGHT TOUCH_SECTIONS * 2 // Right boundary of center area
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -73,7 +80,8 @@ unsigned long touched_at = 0;
 
 // settings screen
 bool settings_screen_visible = false;
-int current_delay_index = 0; // Index into delay_configs array
+int current_delay_index = 0;      // Index into delay_configs array
+int current_brightness_pct = 100; // Brightness percentage (10-100 in steps of 10)
 
 // runtime variables
 bool force_refresh = true;
@@ -138,63 +146,130 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
   return 1;
 }
 
-// Function to display the settings screen
+// Function to display the settings screen (based on example.cpp design)
 void showSettingsScreen()
 {
-  // Define UI color palette
-  uint16_t button_bg = TFT_MAGENTA;
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE);
+  tft.fillScreen(0x0000);
+  tft.setTextDatum(MC_DATUM);
 
-  // Draw title
-  String title = "Frame Interval";
-  int16_t title_width = title.length() * 18; // Approximate character width
-  int16_t title_x = (tft.width() - title_width) / 2 + 2;
-  tft.setTextSize(3);
-  tft.setCursor(title_x, 50);
-  tft.print(title);
-
-  // Draw current delay label in center with 20px margins
-  String label = String(delay_configs[current_delay_index].label);
-  int16_t label_width = label.length() * 18; // Approximate width for size 3
-  int16_t label_x = (tft.width() - label_width) / 2;
-  int16_t label_y = tft.height() / 2 - 12;
-  tft.setTextSize(3);
-  tft.setCursor(label_x, label_y);
-  tft.print(label);
-
-  // Draw +/- buttons
-  tft.setTextSize(4);
-  int16_t char_height = 28; // Approximate height at size 4
-  int16_t char_width = 20;  // Approximate width at size 4
-  int16_t button_size = 60;
-  int16_t button_radius = 10;
-  int16_t margin = 60;
-  int16_t button_y = tft.height() / 2 - (button_size / 2);
-
-  // - button (left side with margin)
-  tft.fillRoundRect(margin, button_y, button_size, button_size, button_radius, button_bg);
-  tft.setCursor(margin + (button_size - char_width) / 2, button_y + (button_size - char_height) / 2);
-  tft.print("-");
-
-  // + button (right side with margin)
-  int16_t plus_x = tft.width() - margin - button_size;
-  tft.fillRoundRect(plus_x, button_y, button_size, button_size, button_radius, button_bg);
-  tft.setCursor(plus_x + (button_size - char_width) / 2, button_y + (button_size - char_height) / 2);
-  tft.print("+");
-
-  // Draw Save & Close button at bottom with extended width
-  int16_t close_y = tft.height() - 80;
-  int16_t close_button_width = 180; // Extended width to fit text
-  int16_t close_x = (tft.width() - close_button_width) / 2;
-  tft.fillRoundRect(close_x, close_y, close_button_width, 50, button_radius, button_bg);
+  // Frame Interval section
+  tft.fillRoundRect(20, 20, SCREEN_WIDTH - 40, 100, 12, 0x2104);
+  tft.setTextColor(0xFFFF);
   tft.setTextSize(2);
+  tft.setTextDatum(TC_DATUM);
+  tft.drawString("Frame Interval", SCREEN_CENTER_X, 35);
+  tft.setTextDatum(MC_DATUM);
 
-  // Center "Save & Close" text in the button
-  String close_text = "Save & Close";
-  int16_t close_text_width = close_text.length() * 12; // Approximate width for size 2
-  tft.setCursor(close_x + (close_button_width - close_text_width) / 2, close_y + 18);
-  tft.print(close_text);
+  // + button for frame interval
+  tft.fillRoundRect(SCREEN_WIDTH - (110 + 40), 65, 40, 40, 6, 0xF81F);
+  tft.drawRoundRect(SCREEN_WIDTH - (110 + 40), 65, 40, 40, 6, 0xFFFF);
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(3);
+  tft.drawString("+", SCREEN_WIDTH - (110 + 20 - 1), (85 + 1));
+
+  // - button for frame interval
+  tft.fillRoundRect(110, 65, 40, 40, 6, 0xF81F);
+  tft.drawRoundRect(110, 65, 40, 40, 6, 0xFFFF);
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(3);
+  tft.drawString("-", (110 + 20 - 1), (85 + 1));
+
+  // Display current frame interval value
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(3);
+  tft.drawString(delay_configs[current_delay_index].label, SCREEN_CENTER_X, 85);
+
+  // Brightness section
+  tft.fillRoundRect(20, 140, SCREEN_WIDTH - 40, 100, 12, 0x2104);
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(2);
+  tft.setTextDatum(TC_DATUM);
+  tft.drawString("Brightness", SCREEN_CENTER_X, 155);
+  tft.setTextDatum(MC_DATUM);
+
+  // + button for brightness
+  tft.fillRoundRect(SCREEN_WIDTH - (110 + 40), 185, 40, 40, 6, 0xF81F);
+  tft.drawRoundRect(SCREEN_WIDTH - (110 + 40), 185, 40, 40, 6, 0xFFFF);
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(3);
+  tft.drawString("+", SCREEN_WIDTH - (110 + 20 - 1), (205 + 1));
+
+  // - button for brightness
+  tft.fillRoundRect(110, 185, 40, 40, 6, 0xF81F);
+  tft.drawRoundRect(110, 185, 40, 40, 6, 0xFFFF);
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(3);
+  tft.drawString("-", (110 + 20 - 1), (205 + 1));
+
+  // Display current brightness percentage
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(3);
+  tft.drawString(String(current_brightness_pct) + "%", SCREEN_CENTER_X, 205);
+
+  // Save & Close button
+  tft.fillRoundRect(160, 260, 160, 40, 6, 0xF81F);
+  tft.drawRoundRect(160, 260, 160, 40, 6, 0xFFFF);
+  tft.setTextColor(0xFFFF);
+  tft.setTextSize(2);
+  tft.drawString("Save & Close", SCREEN_CENTER_X, 280);
+
+  // reset to default
+  tft.setTextDatum(TL_DATUM);
+}
+
+// Function to display the main slideshow screen
+void drawMainScreen()
+{
+  // Let TFT_eSPI manage CS internally
+  tft.fillScreen(TFT_BLACK);
+
+  // Add "/" prefix to filename for SD card path
+  String filepath = "/" + file_list[file_index];
+
+  // Wrap image rendering with error handling
+  // Get image dimensions to center it
+  uint16_t img_w = 0, img_h = 0;
+  SPI_ON_SD;
+  int result = TJpgDec.getFsJpgSize(&img_w, &img_h, filepath.c_str(), SD);
+
+  if (result == 0)
+  {
+    // Calculate centered position
+    int16_t x_pos = (tft.width() - img_w) / 2;
+    int16_t y_pos = (tft.height() - img_h) / 2;
+
+    // Ensure position is not negative
+    if (x_pos < 0)
+      x_pos = 0;
+    if (y_pos < 0)
+      y_pos = 0;
+
+    // Try to draw the image
+    result = TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
+
+    if (result != 0)
+    {
+      Serial.print("Error drawing image (error code: ");
+      Serial.print(result);
+      Serial.println("). Skipping to next image.");
+    }
+  }
+  else
+  {
+    Serial.print("Error getting image size (error code: ");
+    Serial.print(result);
+    Serial.println("). Skipping to next image.");
+  }
+
+  SPI_OFF_SD;
+
+  file_index++;
+  if (file_index >= file_list.size())
+  {
+    file_index = 0;
+  }
+  runtime = millis();
+  force_refresh = false;
 }
 
 void setup(void)
@@ -205,9 +280,9 @@ void setup(void)
   // Initialize boot button
   pinMode(BOOT_BUTTON, INPUT_PULLUP);
 
-  // Initialize backlight pin
+  // Initialize backlight pin with PWM
   pinMode(TFT_BL, OUTPUT);
-  digitalWrite(TFT_BL, HIGH); // Turn backlight on at startup
+  analogWrite(TFT_BL, (current_brightness_pct * 255) / 100); // Set initial brightness with PWM
 
   // Initialize chip select pin for SD
   pinMode(SD_CS, OUTPUT);
@@ -218,30 +293,23 @@ void setup(void)
   tft.setRotation(1); // Landscape mode
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
+  tft.setTextDatum(TC_DATUM);
   tft.setSwapBytes(true);
 
   // Display "Booting up..." message
+  int16_t title_y = SCREEN_CENTER_Y - 40;
   tft.setTextSize(4);
-  String boot_title = "Booting up...";
-  int16_t title_width = boot_title.length() * 24; // Approximate width for size 4
-  int16_t title_x = (tft.width() - title_width) / 2;
-  int16_t title_y = (tft.height() / 2) - 40;
-  tft.setCursor(title_x, title_y);
-  tft.print(boot_title);
+  tft.drawString("Booting up...", SCREEN_CENTER_X, title_y);
 
   // Helper function to display setup steps
   auto displayStep = [&](const char *step)
   {
-    tft.setTextSize(2);
-    int16_t step_width = strlen(step) * 12; // Approximate width for size 2
-    int16_t step_x = (tft.width() - step_width) / 2;
     int16_t step_y = title_y + 50;
 
     // Clear previous step text area
-    tft.fillRect(0, step_y, tft.width(), 20, TFT_BLACK);
-
-    tft.setCursor(step_x, step_y);
-    tft.print(step);
+    tft.setTextSize(2);
+    tft.fillRect(0, step_y, tft.width(), 25, TFT_BLACK);
+    tft.drawString(step, SCREEN_CENTER_X, step_y);
   };
 
   // Calibrate touch for rotation 1 (landscape)
@@ -299,14 +367,14 @@ void loop()
 
     if (display_on)
     {
-      digitalWrite(TFT_BL, HIGH); // Turn backlight on
-      tft.fillScreen(TFT_BLACK);  // Clear any artifacts
-      force_refresh = true;       // Immediately show current image
+      analogWrite(TFT_BL, (current_brightness_pct * 255) / 100); // Turn backlight on with current brightness
+      tft.fillScreen(TFT_BLACK);                                 // Clear any artifacts
+      force_refresh = true;                                      // Immediately show current image
     }
     else
     {
       tft.fillScreen(TFT_BLACK); // Fill screen black before turning off
-      digitalWrite(TFT_BL, LOW); // Turn backlight off
+      analogWrite(TFT_BL, 0);    // Turn backlight off
     }
 
     button_pressed_at = millis();
@@ -323,56 +391,7 @@ void loop()
   // Skip auto-advance if IMAGE_LIFETIME is 0 (manual mode) unless force_refresh is set for manual navigation
   if (display_on && !settings_screen_visible && (((IMAGE_LIFETIME > 0) && (millis() - runtime >= IMAGE_LIFETIME)) || force_refresh))
   {
-    // Let TFT_eSPI manage CS internally
-    tft.fillScreen(TFT_BLACK);
-
-    // Add "/" prefix to filename for SD card path
-    String filepath = "/" + file_list[file_index];
-
-    // Wrap image rendering with error handling
-    // Get image dimensions to center it
-    uint16_t img_w = 0, img_h = 0;
-    SPI_ON_SD;
-    int result = TJpgDec.getFsJpgSize(&img_w, &img_h, filepath.c_str(), SD);
-
-    if (result == 0)
-    {
-      // Calculate centered position
-      int16_t x_pos = (tft.width() - img_w) / 2;
-      int16_t y_pos = (tft.height() - img_h) / 2;
-
-      // Ensure position is not negative
-      if (x_pos < 0)
-        x_pos = 0;
-      if (y_pos < 0)
-        y_pos = 0;
-
-      // Try to draw the image
-      result = TJpgDec.drawSdJpg(x_pos, y_pos, filepath.c_str());
-
-      if (result != 0)
-      {
-        Serial.print("Error drawing image (error code: ");
-        Serial.print(result);
-        Serial.println("). Skipping to next image.");
-      }
-    }
-    else
-    {
-      Serial.print("Error getting image size (error code: ");
-      Serial.print(result);
-      Serial.println("). Skipping to next image.");
-    }
-
-    SPI_OFF_SD;
-
-    file_index++;
-    if (file_index >= file_list.size())
-    {
-      file_index = 0;
-    }
-    runtime = millis();
-    force_refresh = false;
+    drawMainScreen();
   }
 
   // Process pending multi-taps after window expires - check for 2 taps to open settings
@@ -397,59 +416,94 @@ void loop()
     if (settings_screen_visible)
     {
       // Handle settings screen touches
-      int16_t button_size = 60;
-      int16_t button_y = tft.height() / 2 - (button_size / 2);
-      int16_t margin = 60;
-      int16_t minus_x = margin;
-      int16_t plus_x = tft.width() - margin - button_size;
-      int16_t close_y = tft.height() - 80;
-      int16_t close_button_width = 180;
-      int16_t close_button_height = 50;
-      int16_t close_x = (tft.width() - close_button_width) / 2;
-
-      // Check for - button (left side)
-      if (touch_x >= minus_x && touch_x <= (minus_x + button_size) &&
-          touch_y >= button_y && touch_y <= (button_y + button_size))
+      // Frame Interval buttons: y 65-105, - button at x=110-150, + button at x=330-370
+      if (touch_y >= 65 && touch_y <= 105)
       {
-        // Decrease delay index
-        current_delay_index--;
-        if (current_delay_index < 0)
+        // Check for - button (frame interval)
+        if (touch_x >= 110 && touch_x <= 150)
         {
-          current_delay_index = NUM_DELAY_CONFIGS - 1; // Wrap to end
-        }
-        IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
-        showSettingsScreen();
+          // Decrease delay index
+          current_delay_index--;
+          if (current_delay_index < 0)
+          {
+            current_delay_index = NUM_DELAY_CONFIGS - 1; // Wrap to end
+          }
+          IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
+          showSettingsScreen();
 
-        // Wait for touch release
-        while (tft.getTouch(&touch_x, &touch_y, 600))
-        {
-          delay(50);
+          // Wait for touch release
+          while (tft.getTouch(&touch_x, &touch_y, 600))
+          {
+            delay(50);
+          }
+          delay(200); // Debounce
         }
-        delay(200); // Debounce
+        // Check for + button (frame interval)
+        else if (touch_x >= 330 && touch_x <= 370)
+        {
+          // Increase delay index
+          current_delay_index++;
+          if (current_delay_index >= NUM_DELAY_CONFIGS)
+          {
+            current_delay_index = 0; // Wrap to start
+          }
+          IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
+          showSettingsScreen();
+
+          // Wait for touch release
+          while (tft.getTouch(&touch_x, &touch_y, 600))
+          {
+            delay(50);
+          }
+          delay(200); // Debounce
+        }
       }
-      // Check for + button (right side)
-      else if (touch_x >= plus_x && touch_x <= (plus_x + button_size) &&
-               touch_y >= button_y && touch_y <= (button_y + button_size))
+      // Brightness buttons (middle section: y 192, height 40)
+      // - button at x=128, + button at x=312
+      else if (touch_y >= 192 && touch_y <= 232)
       {
-        // Increase delay index
-        current_delay_index++;
-        if (current_delay_index >= NUM_DELAY_CONFIGS)
+        // Check for - button (brightness)
+        if (touch_x >= 128 && touch_x <= 168)
         {
-          current_delay_index = 0; // Wrap to start
-        }
-        IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
-        showSettingsScreen();
+          // Decrease brightness
+          current_brightness_pct -= 10;
+          if (current_brightness_pct < 10)
+          {
+            current_brightness_pct = 10; // Minimum brightness 10%
+          }
+          analogWrite(TFT_BL, (current_brightness_pct * 255) / 100);
+          showSettingsScreen();
 
-        // Wait for touch release
-        while (tft.getTouch(&touch_x, &touch_y, 600))
-        {
-          delay(50);
+          // Wait for touch release
+          while (tft.getTouch(&touch_x, &touch_y, 600))
+          {
+            delay(50);
+          }
+          delay(200); // Debounce
         }
-        delay(200); // Debounce
+        // Check for + button (brightness)
+        else if (touch_x >= 312 && touch_x <= 352)
+        {
+          // Increase brightness
+          current_brightness_pct += 10;
+          if (current_brightness_pct > 100)
+          {
+            current_brightness_pct = 100; // Maximum brightness 100%
+          }
+          analogWrite(TFT_BL, (current_brightness_pct * 255) / 100);
+          showSettingsScreen();
+
+          // Wait for touch release
+          while (tft.getTouch(&touch_x, &touch_y, 600))
+          {
+            delay(50);
+          }
+          delay(200); // Debounce
+        }
       }
-      // Check for Close button
-      else if (touch_x >= close_x && touch_x <= (close_x + close_button_width) &&
-               touch_y >= close_y && touch_y <= (close_y + close_button_height))
+      // Save & Close button (bottom: y 264, height 40, x 172, width 140)
+      else if (touch_x >= 172 && touch_x <= 312 &&
+               touch_y >= 264 && touch_y <= 304)
       {
         // Close settings and return to slideshow
         settings_screen_visible = false;
