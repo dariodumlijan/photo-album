@@ -15,8 +15,11 @@ A digital photo frame built with ESP32 that displays images from a MicroSD card 
 ## Features
 
 - 📸 **Automatic slideshow** with configurable intervals via settings screen
-  - **11 interval options**: 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, or manual mode (infinite)
+  - **11 interval options**: 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, or OFF (manual mode)
   - **Settings UI**: Double-tap center to open settings screen with +/- buttons
+- 🔆 **Brightness control** with 10 adjustable levels (10%-100%) via settings screen
+  - PWM-based backlight control for smooth brightness adjustment
+  - Settings persist during runtime
 - 👆 **Enhanced touch navigation** with three distinct areas:
   - **Left third**: Previous image
   - **Center third**: Double-tap to open settings
@@ -273,7 +276,8 @@ The touchscreen is divided into three functional areas:
 - **Left third (0-160px)**: Navigate to **previous image**
 - **Center third (160-320px)**: **Double-tap to open settings screen**
   - Settings screen displays current interval with +/- buttons to adjust
-  - Available intervals: 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, infinite (manual mode)
+  - Available intervals: 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, OFF (manual mode)
+  - Brightness control with +/- buttons (10%-100% in 10% increments)
   - Tap "Save & Close" button to return to slideshow
 - **Right third (320-480px)**: Navigate to **next image**
 
@@ -286,7 +290,8 @@ The touchscreen is divided into three functional areas:
 #### User Configuration (Runtime)
 
 - **Slideshow timing**: Double-tap center area to open settings screen, use +/- buttons to adjust interval
-- **Manual mode**: Select "Infinite" interval to disable auto-advance for manual-only navigation
+- **Manual mode**: Select "OFF" interval to disable auto-advance for manual-only navigation
+- **Display brightness**: Adjust brightness from 10% to 100% in 10% increments via settings screen
 
 #### Developer Configuration
 
@@ -305,17 +310,23 @@ ImageDelayConfig delay_configs[] = {
     {1800000, "30 min"},
     {2700000, "45 min"},
     {3600000, "1 h"},
-    {0, "Infinite"} // manual mode (infinite delay)
+    {0, "OFF"} // manual mode (infinite delay)
 };
 
 // Button and touch behavior settings
 #define BUTTON_DEBOUNCE 300       // Button debounce time in milliseconds
 #define TOUCH_DEBOUNCE 150        // Touch debounce time
-#define MULTI_TAP_WINDOW 1000     // Time window for detecting double-tap (milliseconds)
+#define MULTI_TAP_WINDOW 500      // Time window for detecting double-tap (milliseconds)
 
-// Center screen area for settings access (x-coordinates)
-#define CENTER_TOUCH_LEFT 160     // Left boundary of center area (160px from left)
-#define CENTER_TOUCH_RIGHT 320    // Right boundary of center area (320px from left)
+// Screen area config
+#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 320
+#define TOUCH_SECTIONS SCREEN_WIDTH / 3
+#define CENTER_TOUCH_LEFT TOUCH_SECTIONS * 1  // Left boundary of center area
+#define CENTER_TOUCH_RIGHT TOUCH_SECTIONS * 2 // Right boundary of center area
+
+// Default brightness (10-100 in steps of 10)
+int current_brightness_pct = 100;
 ```
 
 ## Touch Calibration
@@ -398,14 +409,31 @@ uint16_t calData[5] = {257, 3677, 223, 3571, 7};
 
 ### Recent Updates
 
-#### Settings Screen UI and Extended Intervals (Latest)
+#### Brightness Control (Latest)
+
+- **Brightness control**: Added adjustable display brightness settings
+  - 10 brightness levels: 10%, 20%, 30%, 40%, 50%, 60%, 70%, 80%, 90%, 100%
+  - PWM-based backlight control using [`analogWrite()`](src/main.cpp:285) on TFT_BL pin (GPIO 27)
+  - +/- buttons in settings screen to adjust brightness in real-time
+  - Default brightness: 100%
+  - Minimum brightness: 10% (prevents completely dark screen)
+- **Enhanced settings screen UI**: Redesigned with two sections
+  - "Frame Interval" section with current value display and +/- controls
+  - "Brightness" section with percentage display and +/- controls
+  - Improved visual design with rounded rectangles and consistent styling
+- **UI improvements**:
+  - Changed "Infinite" label to "OFF" for manual mode (clearer terminology)
+  - Reduced multi-tap window from 1000ms to 500ms for faster settings access
+  - Better screen organization with separate sections for each setting type
+
+#### Settings Screen UI and Extended Intervals
 
 - **Settings screen interface**: Double-tap center area opens dedicated settings UI
   - Visual display of current interval with title "Frame Interval"
   - +/- buttons to cycle through available intervals
   - "Save & Close" button to return to slideshow
-- **Extended interval options**: 11 configurable intervals from 10 seconds to 1 hour, plus infinite (manual mode)
-  - 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, infinite
+- **Extended interval options**: 11 configurable intervals from 10 seconds to 1 hour, plus OFF (manual mode)
+  - 10 sec, 30 sec, 1 min, 2 min, 5 min, 10 min, 15 min, 30 min, 45 min, 1 hour, OFF
 - **Improved touch responsiveness**: Reduced touch debounce from 300ms to 150ms
 - **Three-area touch system**: Screen divided into left (previous), center (settings), and right (next) touch areas
 - **Persistent settings**: Selected interval persists until changed via settings screen
