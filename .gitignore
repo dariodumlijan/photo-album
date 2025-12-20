@@ -1,14 +1,7 @@
 # image files
-assets/**/*.jpg
-assets/**/*.jpeg
-assets/**/*.png
-assets/**/*.gif
-assets/**/*.bmp
-assets/**/*.tiff
-assets/**/*.tif
-assets/**/*.webp
-assets/**/*.heic
-assets/**/*.heif
+!assets/**/.keep
+assets/root/*
+assets/target/*
 
 # apple misc
 .DS_Store

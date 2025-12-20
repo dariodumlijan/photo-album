@@ -1,6 +1,8 @@
 # ESP32 Photo Frame
 
-A digital photo frame built with ESP32 that displays images from a MicroSD card on a 3.5" TFT touchscreen display. This project uses PlatformIO for development and dependency management.
+A digital photo frame built with ESP32 that displays images from a MicroSD card on a 3.5" TFT touchscreen display.
+
+![featured](.github/docs/featured.gif)
 
 ## Hardware Requirements
 

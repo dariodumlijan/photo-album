@@ -88,7 +88,7 @@ bool force_refresh = true;
 unsigned long runtime = 0;
 
 // Gets all image files in the SD card root directory
-void get_pic_list(fs::FS &fs, const char *dirname, std::vector<String> &wavlist)
+void get_image_list(fs::FS &fs, const char *dirname, std::vector<String> &wavlist)
 {
   Serial.printf("Listing directory: %s\n", dirname);
   wavlist.clear(); // Clear any existing entries
@@ -172,7 +172,7 @@ void showSettingsScreen()
   tft.drawRoundRect(110, 65, 40, 40, 6, 0xFFFF);
   tft.setTextColor(0xFFFF);
   tft.setTextSize(3);
-  tft.drawString("-", (110 + 20 - 1), (85 + 1));
+  tft.drawString("-", (110 + 20 + 1), (85 + 1));
 
   // Display current frame interval value
   tft.setTextColor(0xFFFF);
@@ -199,7 +199,7 @@ void showSettingsScreen()
   tft.drawRoundRect(110, 185, 40, 40, 6, 0xFFFF);
   tft.setTextColor(0xFFFF);
   tft.setTextSize(3);
-  tft.drawString("-", (110 + 20 - 1), (205 + 1));
+  tft.drawString("-", (110 + 20 + 1), (205 + 1));
 
   // Display current brightness percentage
   tft.setTextColor(0xFFFF);
@@ -225,6 +225,8 @@ void drawMainScreen()
 
   // Add "/" prefix to filename for SD card path
   String filepath = "/" + file_list[file_index];
+  Serial.print("Loading image: ");
+  Serial.println(filepath);
 
   // Wrap image rendering with error handling
   // Get image dimensions to center it
@@ -339,9 +341,8 @@ void setup(void)
   Serial.println("SD Card Mount Succeeded");
   delay(300);
 
-  // Get list of JPG files
   displayStep("Scanning SD card...");
-  get_pic_list(SD, "/", file_list);
+  get_image_list(SD, "/", file_list);
   delay(300);
 
   // Display photo count
