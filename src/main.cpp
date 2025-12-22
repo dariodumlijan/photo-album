@@ -68,6 +68,7 @@ TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 // images
 std::vector<String> file_list;
 int file_index = 0;
+bool force_refresh = true;
 
 // screen
 bool display_on = true;
@@ -83,70 +84,11 @@ bool settings_screen_visible = false;
 int current_delay_index = 0;      // Index into delay_configs array
 int current_brightness_pct = 100; // Brightness percentage (10-100 in steps of 10)
 
-// runtime variables
-bool force_refresh = true;
+// runtime tracking
 unsigned long runtime = 0;
 
-// Gets all image files in the SD card root directory
-void get_image_list(fs::FS &fs, const char *dirname, std::vector<String> &wavlist)
-{
-  Serial.printf("Listing directory: %s\n", dirname);
-  wavlist.clear(); // Clear any existing entries
+// ====== SETTINGS SCREEN ======
 
-  File root = fs.open(dirname);
-  if (!root)
-  {
-    Serial.println("Failed to open directory");
-    return;
-  }
-  if (!root.isDirectory())
-  {
-    Serial.println("Not a directory");
-    return;
-  }
-
-  File file = root.openNextFile();
-  while (file)
-  {
-    if (file.isDirectory())
-    {
-      // Skip directories
-    }
-    else
-    {
-      String temp = file.name();
-
-      // Skip hidden files (starting with .)
-      if (!temp.startsWith(".") && !temp.startsWith("/."))
-      {
-        // Check if file is JPG
-        temp.toLowerCase();
-        if (temp.endsWith(".jpg"))
-        {
-          wavlist.push_back(file.name());
-          Serial.print("Found: ");
-          Serial.println(wavlist.back());
-        }
-      }
-    }
-    file = root.openNextFile();
-  }
-}
-
-bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
-{
-  // Stop further decoding as image is running off bottom of screen
-  if (y >= tft.height())
-    return 0;
-
-  // This function will clip the image block rendering automatically at the TFT boundaries
-  tft.pushImage(x, y, w, h, bitmap);
-
-  // Return 1 to decode next block
-  return 1;
-}
-
-// Function to display the settings screen (based on example.cpp design)
 void showSettingsScreen()
 {
   tft.fillScreen(0x0000);
@@ -217,7 +159,8 @@ void showSettingsScreen()
   tft.setTextDatum(TL_DATUM);
 }
 
-// Function to display the main slideshow screen
+// ====== MAIN SCREEN ======
+
 void drawMainScreen()
 {
   // Let TFT_eSPI manage CS internally
@@ -273,6 +216,287 @@ void drawMainScreen()
   runtime = millis();
   force_refresh = false;
 }
+
+// ====== HELPER FUNCTIONS ======
+
+// Gets all image files in the SD card root directory
+void get_image_list(fs::FS &fs, const char *dirname, std::vector<String> &wavlist)
+{
+  Serial.printf("Listing directory: %s\n", dirname);
+  wavlist.clear(); // Clear any existing entries
+
+  File root = fs.open(dirname);
+  if (!root)
+  {
+    Serial.println("Failed to open directory");
+    return;
+  }
+  if (!root.isDirectory())
+  {
+    Serial.println("Not a directory");
+    return;
+  }
+
+  File file = root.openNextFile();
+  while (file)
+  {
+    if (file.isDirectory())
+    {
+      // Skip directories
+    }
+    else
+    {
+      String temp = file.name();
+
+      // Skip hidden files (starting with .)
+      if (!temp.startsWith(".") && !temp.startsWith("/."))
+      {
+        // Check if file is JPG
+        temp.toLowerCase();
+        if (temp.endsWith(".jpg"))
+        {
+          wavlist.push_back(file.name());
+          Serial.print("Found: ");
+          Serial.println(wavlist.back());
+        }
+      }
+    }
+    file = root.openNextFile();
+  }
+}
+
+bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
+{
+  // Stop further decoding as image is running off bottom of screen
+  if (y >= tft.height())
+    return 0;
+
+  // This function will clip the image block rendering automatically at the TFT boundaries
+  tft.pushImage(x, y, w, h, bitmap);
+
+  // Return 1 to decode next block
+  return 1;
+}
+
+void waitForTouchRelease(uint16_t &touch_x, uint16_t &touch_y)
+{
+  while (tft.getTouch(&touch_x, &touch_y, 600))
+  {
+    delay(50);
+  }
+}
+
+void handleBootButton()
+{
+  if (digitalRead(BOOT_BUTTON) != LOW)
+    return;
+
+  if (millis() - button_pressed_at <= BUTTON_DEBOUNCE)
+    return;
+
+  display_on = !display_on;
+
+  if (display_on)
+  {
+    analogWrite(TFT_BL, (current_brightness_pct * 255) / 100);
+    tft.fillScreen(TFT_BLACK);
+    force_refresh = true;
+  }
+  else
+  {
+    analogWrite(TFT_BL, 0);
+  }
+
+  button_pressed_at = millis();
+
+  while (digitalRead(BOOT_BUTTON) == LOW)
+  {
+    delay(50);
+  }
+}
+
+void handleAutoAdvance()
+{
+  if (!display_on || settings_screen_visible)
+    return;
+
+  bool should_advance = force_refresh || (IMAGE_LIFETIME > 0 && millis() - runtime >= IMAGE_LIFETIME);
+
+  if (should_advance)
+  {
+    drawMainScreen();
+  }
+}
+
+void handleMultiTapTimeout()
+{
+  if (taps == 0)
+    return;
+
+  if (millis() - tapped_at < MULTI_TAP_WINDOW)
+    return;
+
+  if (taps == 2)
+  {
+    settings_screen_visible = true;
+    showSettingsScreen();
+  }
+
+  taps = 0;
+}
+
+void adjustDelayIndex(int direction)
+{
+  current_delay_index += direction;
+
+  if (current_delay_index < 0)
+  {
+    current_delay_index = NUM_DELAY_CONFIGS - 1;
+  }
+
+  if (current_delay_index >= NUM_DELAY_CONFIGS)
+  {
+    current_delay_index = 0;
+  }
+
+  IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
+  showSettingsScreen();
+}
+
+void adjustBrightness(int delta)
+{
+  current_brightness_pct += delta;
+
+  if (current_brightness_pct < 10)
+  {
+    current_brightness_pct = 10;
+  }
+
+  if (current_brightness_pct > 100)
+  {
+    current_brightness_pct = 100;
+  }
+
+  analogWrite(TFT_BL, (current_brightness_pct * 255) / 100);
+  showSettingsScreen();
+}
+
+void handleSettingsTouch(uint16_t touch_x, uint16_t touch_y)
+{
+  // Frame Interval buttons (y: 65-105)
+  if (touch_y >= 65 && touch_y <= 105)
+  {
+    if (touch_x >= 110 && touch_x <= 150)
+    {
+      adjustDelayIndex(-1);
+      waitForTouchRelease(touch_x, touch_y);
+      return;
+    }
+
+    if (touch_x >= 330 && touch_x <= 370)
+    {
+      adjustDelayIndex(1);
+      waitForTouchRelease(touch_x, touch_y);
+      return;
+    }
+  }
+
+  // Brightness buttons (y: 192-232)
+  if (touch_y >= 192 && touch_y <= 232)
+  {
+    if (touch_x >= 128 && touch_x <= 168)
+    {
+      adjustBrightness(-10);
+      waitForTouchRelease(touch_x, touch_y);
+      return;
+    }
+
+    if (touch_x >= 312 && touch_x <= 352)
+    {
+      adjustBrightness(10);
+      waitForTouchRelease(touch_x, touch_y);
+      return;
+    }
+  }
+
+  // Save & Close button (x: 172-312, y: 264-304)
+  if (touch_x >= 172 && touch_x <= 312 && touch_y >= 264 && touch_y <= 304)
+  {
+    settings_screen_visible = false;
+    force_refresh = true;
+    runtime = millis();
+    waitForTouchRelease(touch_x, touch_y);
+  }
+}
+
+void handleCenterTap(uint16_t touch_x, uint16_t touch_y)
+{
+  if (millis() - tapped_at < MULTI_TAP_WINDOW && tapped_at > 0)
+  {
+    taps++;
+    Serial.print("Incremented taps to: ");
+    Serial.println(taps);
+  }
+  else
+  {
+    taps = 1;
+    Serial.println("Starting new tap sequence");
+  }
+
+  tapped_at = millis();
+  waitForTouchRelease(touch_x, touch_y);
+}
+
+void handleSideTouch(uint16_t touch_x, uint16_t touch_y)
+{
+  if (millis() - touched_at <= TOUCH_DEBOUNCE)
+    return;
+
+  touched_at = millis();
+
+  if (touch_x < CENTER_TOUCH_LEFT)
+  {
+    file_index = (file_index + file_list.size() - 2) % file_list.size();
+    force_refresh = true;
+  }
+  else
+  {
+    force_refresh = true;
+  }
+
+  waitForTouchRelease(touch_x, touch_y);
+}
+
+void handleSlideshowTouch(uint16_t touch_x, uint16_t touch_y)
+{
+  if (touch_x >= CENTER_TOUCH_LEFT && touch_x <= CENTER_TOUCH_RIGHT)
+  {
+    handleCenterTap(touch_x, touch_y);
+  }
+  else
+  {
+    handleSideTouch(touch_x, touch_y);
+  }
+}
+
+void handleTouchInput()
+{
+  uint16_t touch_x = 0, touch_y = 0;
+
+  if (!tft.getTouch(&touch_x, &touch_y, 600))
+    return;
+
+  if (settings_screen_visible)
+  {
+    handleSettingsTouch(touch_x, touch_y);
+  }
+  else
+  {
+    handleSlideshowTouch(touch_x, touch_y);
+  }
+}
+
+// ====== SETUP ======
 
 void setup(void)
 {
@@ -358,228 +582,12 @@ void setup(void)
   tft.fillScreen(TFT_BLACK);
 }
 
+// ====== MAIN LOOP ======
+
 void loop()
 {
-  // Simple boot button - just toggle display on/off
-  if (digitalRead(BOOT_BUTTON) == LOW &&
-      (millis() - button_pressed_at > BUTTON_DEBOUNCE))
-  {
-    display_on = !display_on; // Toggle display state
-
-    if (display_on)
-    {
-      analogWrite(TFT_BL, (current_brightness_pct * 255) / 100); // Turn backlight on with current brightness
-      tft.fillScreen(TFT_BLACK);                                 // Clear any artifacts
-      force_refresh = true;                                      // Immediately show current image
-    }
-    else
-    {
-      tft.fillScreen(TFT_BLACK); // Fill screen black before turning off
-      analogWrite(TFT_BL, 0);    // Turn backlight off
-    }
-
-    button_pressed_at = millis();
-
-    // Wait for button release with debounce
-    while (digitalRead(BOOT_BUTTON) == LOW)
-    {
-      delay(50);
-    }
-    delay(BUTTON_DEBOUNCE);
-  }
-
-  // Auto-advance images every x seconds or when force_refresh is set (only when display is on and not showing settings)
-  // Skip auto-advance if IMAGE_LIFETIME is 0 (manual mode) unless force_refresh is set for manual navigation
-  if (display_on && !settings_screen_visible && (((IMAGE_LIFETIME > 0) && (millis() - runtime >= IMAGE_LIFETIME)) || force_refresh))
-  {
-    drawMainScreen();
-  }
-
-  // Process pending multi-taps after window expires - check for 2 taps to open settings
-  if (taps == 2 && (millis() - tapped_at >= MULTI_TAP_WINDOW))
-  {
-    settings_screen_visible = true;
-    showSettingsScreen();
-    taps = 0; // Reset tap count after processing
-  }
-  else if (taps > 0 && (millis() - tapped_at >= MULTI_TAP_WINDOW))
-  {
-    // Reset tap count if not 2 taps
-    taps = 0;
-  }
-
-  // Check for touch input using TFT_eSPI's built-in touch support
-  uint16_t touch_x = 0, touch_y = 0;
-
-  // getTouch returns true if touch is detected, threshold filters light touches
-  if (tft.getTouch(&touch_x, &touch_y, 600))
-  {
-    if (settings_screen_visible)
-    {
-      // Handle settings screen touches
-      // Frame Interval buttons: y 65-105, - button at x=110-150, + button at x=330-370
-      if (touch_y >= 65 && touch_y <= 105)
-      {
-        // Check for - button (frame interval)
-        if (touch_x >= 110 && touch_x <= 150)
-        {
-          // Decrease delay index
-          current_delay_index--;
-          if (current_delay_index < 0)
-          {
-            current_delay_index = NUM_DELAY_CONFIGS - 1; // Wrap to end
-          }
-          IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
-          showSettingsScreen();
-
-          // Wait for touch release
-          while (tft.getTouch(&touch_x, &touch_y, 600))
-          {
-            delay(50);
-          }
-          delay(200); // Debounce
-        }
-        // Check for + button (frame interval)
-        else if (touch_x >= 330 && touch_x <= 370)
-        {
-          // Increase delay index
-          current_delay_index++;
-          if (current_delay_index >= NUM_DELAY_CONFIGS)
-          {
-            current_delay_index = 0; // Wrap to start
-          }
-          IMAGE_LIFETIME = delay_configs[current_delay_index].delay;
-          showSettingsScreen();
-
-          // Wait for touch release
-          while (tft.getTouch(&touch_x, &touch_y, 600))
-          {
-            delay(50);
-          }
-          delay(200); // Debounce
-        }
-      }
-      // Brightness buttons (middle section: y 192, height 40)
-      // - button at x=128, + button at x=312
-      else if (touch_y >= 192 && touch_y <= 232)
-      {
-        // Check for - button (brightness)
-        if (touch_x >= 128 && touch_x <= 168)
-        {
-          // Decrease brightness
-          current_brightness_pct -= 10;
-          if (current_brightness_pct < 10)
-          {
-            current_brightness_pct = 10; // Minimum brightness 10%
-          }
-          analogWrite(TFT_BL, (current_brightness_pct * 255) / 100);
-          showSettingsScreen();
-
-          // Wait for touch release
-          while (tft.getTouch(&touch_x, &touch_y, 600))
-          {
-            delay(50);
-          }
-          delay(200); // Debounce
-        }
-        // Check for + button (brightness)
-        else if (touch_x >= 312 && touch_x <= 352)
-        {
-          // Increase brightness
-          current_brightness_pct += 10;
-          if (current_brightness_pct > 100)
-          {
-            current_brightness_pct = 100; // Maximum brightness 100%
-          }
-          analogWrite(TFT_BL, (current_brightness_pct * 255) / 100);
-          showSettingsScreen();
-
-          // Wait for touch release
-          while (tft.getTouch(&touch_x, &touch_y, 600))
-          {
-            delay(50);
-          }
-          delay(200); // Debounce
-        }
-      }
-      // Save & Close button (bottom: y 264, height 40, x 172, width 140)
-      else if (touch_x >= 172 && touch_x <= 312 &&
-               touch_y >= 264 && touch_y <= 304)
-      {
-        // Close settings and return to slideshow
-        settings_screen_visible = false;
-        tft.fillScreen(TFT_BLACK);
-        force_refresh = true;
-        runtime = millis(); // Reset timer
-
-        // Wait for touch release
-        while (tft.getTouch(&touch_x, &touch_y, 600))
-        {
-          delay(50);
-        }
-        delay(200); // Debounce
-      }
-    }
-    else
-    {
-      // Normal slideshow touch handling
-      // Check if touch is in center area (160-320 px width) for delay control
-      if (touch_x >= CENTER_TOUCH_LEFT && touch_x <= CENTER_TOUCH_RIGHT)
-      {
-        // Center tap for changing image delay - no debounce needed for multi-tap
-
-        if (millis() - tapped_at < MULTI_TAP_WINDOW && tapped_at > 0)
-        {
-          taps++;
-          Serial.print("Incremented taps to: ");
-          Serial.println(taps);
-        }
-        else
-        {
-          taps = 1; // Start new tap sequence
-          Serial.println("Starting new tap sequence");
-        }
-
-        tapped_at = millis();
-
-        // Wait for touch release
-        while (tft.getTouch(&touch_x, &touch_y, 600))
-        {
-          delay(50);
-        }
-
-        // Short delay to prevent immediate re-trigger from same touch
-        delay(50);
-      }
-      else if ((touch_x < CENTER_TOUCH_LEFT || touch_x > CENTER_TOUCH_RIGHT) &&
-               (millis() - touched_at > TOUCH_DEBOUNCE))
-      {
-        // Side touches (left/right) need debounce to prevent accidental navigation
-        touched_at = millis();
-
-        if (touch_x < CENTER_TOUCH_LEFT)
-        {
-          // Left side = previous image
-          file_index = (file_index + file_list.size() - 2) % file_list.size();
-          force_refresh = true;
-        }
-        else if (touch_x > CENTER_TOUCH_RIGHT)
-        {
-          // Right side = next image
-          force_refresh = true;
-        }
-
-        // Wait for touch release with debounce
-        while (tft.getTouch(&touch_x, &touch_y, 600))
-        {
-          delay(50);
-        }
-
-        // Additional debounce after release for side touches only
-        delay(TOUCH_DEBOUNCE);
-      }
-    }
-  }
-
-  delay(50); // Small delay to prevent excessive polling
+  handleBootButton();
+  handleAutoAdvance();
+  handleMultiTapTimeout();
+  handleTouchInput();
 }
