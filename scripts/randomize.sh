@@ -59,9 +59,10 @@ for img in "${JPG_FILES[@]}"; do
     ((COUNTER++))
 done
 
-# Now move them back with sequential names to preserve the random order
+# Now move them back with sequential names in truly random order
 COUNTER=1
-for img in "$TEMP_DIR"/*.jpg; do
+# Use shuf to randomize the order of files
+while IFS= read -r img; do
     # Pad counter with zeros (e.g., 001, 002, etc.)
     padded_counter=$(printf "%03d" $COUNTER)
     new_name="${padded_counter}.jpg"
@@ -70,7 +71,7 @@ for img in "$TEMP_DIR"/*.jpg; do
     echo -e "  ${GREEN}✓${NC} Created: $new_name"
     
     ((COUNTER++))
-done
+done < <(find "$TEMP_DIR" -name "*.jpg" | shuf)
 
 # Remove temporary directory
 rmdir "$TEMP_DIR"
