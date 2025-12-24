@@ -94,10 +94,12 @@ for img in "${IMAGE_FILES[@]}"; do
     
     echo -n "Processing: $filename ... "
     
-    # Resize image keeping aspect ratio, fitting within 480x320
-    # Convert to JPG format with quality 90
+    # Process image:
+    # 1. Auto-orient based on EXIF data (fixes rotation issues)
+    # 2. Resize to fit within 480x320 box (keeping aspect ratio)
+    # 3. Convert to JPG with quality 100
     # The '>' flag only shrinks images larger than the target size
-    if magick "$img" -resize "${TARGET_RESOLUTION}>" -quality 90 "$target_path" 2>/dev/null; then
+    if magick "$img" -auto-orient -resize "${TARGET_WIDTH}x${TARGET_HEIGHT}>" -quality 100 "$target_path" 2>/dev/null; then
         echo -e "${GREEN}✓ Done${NC}"
         ((PROCESSED++))
     else
